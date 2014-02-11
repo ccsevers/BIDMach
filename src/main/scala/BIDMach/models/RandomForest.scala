@@ -1,4 +1,4 @@
-package BIDMach
+package BIDMach.models
 
 import BIDMat.{BMat,CMat,CSMat,DMat,Dict,IDict,FMat,GMat,GIMat,GSMat,HMat,IMat,Mat,SMat,SDMat}
 import BIDMat.MatFunctions._
@@ -67,7 +67,7 @@ class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, useGini : 
 	def train {
 		for (k <- 0 until d - 1) { // d of them; each level
 			println("At Depth: " + k);
-			val (dmy, freebytes, allbytes) = SciFunctions.GPUmem
+			val (dmy, freebytes, allbytes) = GPUmem
 			println("dmy: " + dmy + " freebytes: " + freebytes + " allbytes: " + allbytes)
 			/* 
 			calculate all the inner products 
