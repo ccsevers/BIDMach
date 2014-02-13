@@ -17,7 +17,7 @@ val x : DMat = load("../Data/bidmatSpamData.mat", "Xtrain");
 val y : DMat = load("../Data/bidmatSpamData.mat", "ytrain");
 
 def testGPURandomForest : RandomForest = {
-	val useGini = true
+	val impurityType = 2
 	val d = 7
 	val t = 3
 	val ns = 2
@@ -28,7 +28,7 @@ def testGPURandomForest : RandomForest = {
 	// val cats : GMat = GMat(((iones(n,1) * irow(0->2)) == y).t);
 	val cats : GMat = GMat(0\1\0\0 on 1\0\1\1);
 
-	val randomForest : RandomForest = new RandomForest(d, t, ns, feats, cats, useGini);
+	val randomForest : RandomForest = new RandomForest(d, t, ns, feats, cats, impurityType);
 	randomForest.train;
 	println(randomForest.treePos.nrows)
 	println(randomForest.treePos.ncols)

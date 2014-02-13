@@ -9,8 +9,7 @@ import edu.berkeley.bid.CUMAT
 /**
  * Random Forest Implementation
  */
- // val (dmy, freebytes, allbytes) = SciFunctions.GPUmem
-class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, useGini : Boolean) {
+class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, impurityType : Int = 1) {
 	/*
 		Class Variables
 		n = # of samples
@@ -65,7 +64,7 @@ class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, useGini : 
    			println("Starting treeProd")
    			GMat.treeProd(treesArray, feats, treePos, oTreeVal);
 
-			val e = new EntropyEval(oTreeVal, cats, d, k)
+			val e = new EntropyEval(oTreeVal, cats, d, k, impurityType)
 			// e.getThresholdsAndUpdateTreesArray(treePos, oTreeVal, treesArray)
 			e.newGetThresholdsAndUpdateTreesArray(treePos, oTreeVal, treesArray)
 
@@ -124,7 +123,7 @@ class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, useGini : 
 	}
 }
 
-class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int) {
+class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType : Int) {
 	val n = oTreeVal.ncols
 	val t = oTreeVal.nrows;
 	val newSortedIndices : IMat = iones(t, 1) * irow(0->n) // for new code
@@ -164,7 +163,7 @@ class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int) {
 			val curTreePosesT = o2._1
 			val curTreeValsT = o2._2
 			val fullJCForCurTree = getJCSegmentationForFullTree(curTreePosesT)
-			val fullImpurityReductions = calcInformationGain(pctsts, fullJCForCurTree, curTreePosesT)
+			val fullImpurityReductions = calcImpurityReduction(pctsts, fullJCForCurTree, curTreePosesT)
 			markThresholdsGivenReductions(fullImpurityReductions, curTreeValsT, tA, fullJCForCurTree, curT)
 			curT += 1
 		}
@@ -180,12 +179,6 @@ class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int) {
 		/* Sort it! */
 		lexsort2i(sTreePosT, soTreeValT, sIT)
 
-		println("sIT")
-		println(sIT)
-		println("sTreePosT")
-		println(sTreePosT)
-		println("soTreeValT")
-		println(soTreeValT)
 		(sIT, sTreePosT, soTreeValT)
 	}
 
@@ -310,7 +303,7 @@ class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int) {
 					println(accumPctst)
 
 					println("calculating the impurityReduction")
-					val impurityReductions = calcInformationGain(pctst, jc, curTreePoses)
+					val impurityReductions = calcImpurityReduction(pctst, jc, curTreePoses)
 
 					println(impurityReductions)
 					println("JC2 for MAX")
@@ -386,14 +379,14 @@ class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int) {
 		// inf
 	}
 
-	private def calcInformationGain(pctsts : GMat, jc : GIMat, curTreePoses : GIMat) : GMat = {
-		println("calcInformationGain")
+	private def calcImpurityReduction(pctsts : GMat, jc : GIMat, curTreePoses : GIMat) : GMat = {
+		println("calcImpurityReduction")
 
 		/** Left Total Impurity */
 		println("LEFT IMPURITY STUFF")
 		val leftAccumPctsts = GMat.cumsumi(pctsts, jc, null)
 		val leftTots = sum(leftAccumPctsts, 2) * (leftAccumPctsts.zeros(1, leftAccumPctsts.ncols) + GMat(1))
-		val leftImpurity = getImpurityForInfoGain(leftAccumPctsts, leftTots)
+		val leftImpurity = getImpurityFor(leftAccumPctsts, leftTots)
 		
 		/** Total Impurity*/
 		println("TOTAL IMPURITY STUFF")
@@ -409,20 +402,31 @@ class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int) {
 		val totsAccumPctsts = totsAccumPctstsTemps(curTreePoses, GIMat(0->leftAccumPctsts.ncols))  //* (leftAccumPctsts.zeros(1, leftAccumPctsts.ncols) + GMat(1))
 		println("totsAccumPctsts")
 		println(totsAccumPctsts)
-		val totsImpurity = getImpurityForInfoGain(totsAccumPctsts, totTots)
+		val totsImpurity = getImpurityFor(totsAccumPctsts, totTots)
 
 		/** Right Total Impurity */
 		println("RIGHT IMPURITY STUFF")
 		val rightTots = totTots - leftTots
 		val rightAccumPctsts = totsAccumPctsts - leftAccumPctsts
-		val rightImpurity = getImpurityForInfoGain(rightAccumPctsts, rightTots)
+		val rightImpurity = getImpurityFor(rightAccumPctsts, rightTots)
 
-		val informationGain = totsImpurity - leftImpurity - rightImpurity
-		println("NEWINFORMATIONGAIN")
-		println(informationGain)
-		print("NEWINFORMATIONGAINL: SUMMED")
-		val infoGainSummed = sum(informationGain, 2)
-		return infoGainSummed
+		val impurityReduction = totsImpurity - leftImpurity - rightImpurity
+		println("ImpurityReduction")
+		println(impurityReduction)
+		print("ImpurityReduction Summed ")
+		val ImpurityReduction = sum(impurityReduction, 2)
+		return impurityReduction
+	}
+
+	private def getImpurityFor(accumPctsts : GMat, tots : GMat) : GMat = {
+		(impurityType)  match {
+			case (1) => {
+				getImpurityForInfoGain(accumPctsts, tots)
+			}
+			case (2) => {
+				getImpurityForGiniImpurityReduction(accumPctsts, tots)
+			}
+		}
 	}
 
 	private def getImpurityForInfoGain(accumPctsts : GMat, tots : GMat) : GMat = {
@@ -440,13 +444,27 @@ class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int) {
 		val impurity = -1f * ( ps *@ ln(ps) + (conjps *@ ln(conjps)))
 		println("impurity")
 		println(impurity)
-		return impurity 
+		impurity 
 	}
 
 	
-	private def calcGiniImpurityReduction(accumPctst : GMat, jc : GIMat) : GMat = {
+	private def getImpurityForGiniImpurityReduction(accumPctsts : GMat, tots : GMat) : GMat = {
 		// add some e val to 
-		return null
+		println("getImpurityForGiniImpurityReduction")
+		println("accumPctsts")
+		println(accumPctsts)
+		println("tots")
+		println(tots)
+		val ps = (accumPctsts / (tots + eps)) + eps  
+		val conjps = (1f - ps) + eps
+		println("conjps")
+		println(conjps)
+		println("ps")
+		println(ps)
+		val impurity = ps *@ conjps
+		println("impurity")
+		println(impurity)
+		impurity 
 	}
 
   	private def lexsort2i(a : Mat, b: Mat, i : Mat) {
