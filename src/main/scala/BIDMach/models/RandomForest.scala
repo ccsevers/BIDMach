@@ -90,6 +90,8 @@ class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, impurityTy
 				val treeCats = feats.izeros(t, fs.ncols)
 				treeCats.clear
 				// println("Yea: NewTreePos: " + newTreePos)
+
+				saveAs("/home/derrick/code/NewRandomForest/BIDMach/tests/classify.mat", IMat(treesArray), "treesArray", FMat(fs), "fs", IMat(newTreePos), "newTreePos", IMat(treeCats), "treeCats")
 				GMat.treeSearch(treesArray, fs, newTreePos, treeCats)
 				treeCats
 			}
@@ -184,10 +186,10 @@ class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType : I
 
 	private def getCurTreePosCurTreeValAndAssociatedSortedCats(sIT : GIMat, sTreePosT : GIMat, soTreeValT : GMat, cts : GMat, pctst : GMat, tO : GIMat, curT : Int) : (GIMat, GMat) = {
 		val curOffset : GIMat = GIMat(tO(0, curT))
-		val curTreePosesTTemp = sTreePosT(GIMat(0->n), curT) 
+		val curTreePosesTTemp = sTreePosT(0->n, curT) 
 		val curTreePosesT = curTreePosesTTemp - curOffset
-		val curTreeIndicesT = sIT(GIMat(0->n), curT)
-		val curTreeValsT = soTreeValT(GIMat(0->n), curT)
+		val curTreeIndicesT = sIT(0->n, curT)
+		val curTreeValsT = soTreeValT(0->n, curT)
 
 		CUMAT.icopyt(curTreeIndicesT.data, cts.data, pctst.data, n, c, n)	
 		(curTreePosesT, curTreeValsT)
