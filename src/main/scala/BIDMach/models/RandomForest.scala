@@ -47,6 +47,9 @@ class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, useGini : 
 	val oTreePos = feats.izeros(t, n); 
 	val oTreeVal = feats.zeros(t, n)
 	
+	/******************************************************************************************************************************
+	 * PUBLIC: train
+	 ******************************************************************************************************************************/
 	def train {
 		for (k <- 0 until d - 1) { // d of them; each level
 			println("At Depth: " + k);
@@ -63,7 +66,8 @@ class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, useGini : 
    			GMat.treeProd(treesArray, feats, treePos, oTreeVal);
 
 			val e = new EntropyEval(oTreeVal, cats, d, k)
-			e.getThresholdsAndUpdateTreesArray(treePos, oTreeVal, treesArray)
+			// e.getThresholdsAndUpdateTreesArray(treePos, oTreeVal, treesArray)
+			e.newGetThresholdsAndUpdateTreesArray(treePos, oTreeVal, treesArray)
 
 			println("Starting TreeStep")
 			GMat.treeProd(treesArray, feats, treePos, treePos)
@@ -76,6 +80,9 @@ class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, useGini : 
 		println(treesArray)
 	}
 
+	/******************************************************************************************************************************
+	 * PUBLIC: classify
+	 ******************************************************************************************************************************/
 	def classify(feats : Mat) : Mat = {
 		(feats) match {
 			case (fs: GMat) => {
@@ -93,7 +100,7 @@ class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, useGini : 
 	/**
 	 * Updates treesArray threshold 
 	 */
-	def categorizeNodes(tP : Mat, cts : Mat, tA : Mat) {
+	private def categorizeNodes(tP : Mat, cts : Mat, tA : Mat) {
 
 	}
 
@@ -102,14 +109,14 @@ class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, useGini : 
 	 * Mark all current positions as Leaves
 	 * TODO: Maybe mark and compute the categories too?
 	 */
-	def markAllCurPositionsAsLeaves(tArray : Mat, tPos : Mat ) {
+	private def markAllCurPositionsAsLeaves(tArray : Mat, tPos : Mat ) {
 	 	(tArray, tPos) match {
 			case (tA : GIMat, tPos : GIMat) => {
 				val tArr : GMat = new GMat(tA.nrows, tA.ncols, tA.data, tA.length)
 	 			var curT = 0
 	 			while (curT < t) {
 	 				tArr(0,  tPos(curT, 0 -> n)) = scala.Float.NegativeInfinity * GMat(iones(1, n))
-	 				// tArr(1,  tPos(curT, 0 -> n)) =  0 * GMat(iones(1, n))
+	 				tArr(1,  tPos(curT, 0 -> n)) = GMat(100f)
 	 				curT = curT + 1
 	 			}
 	 		}
@@ -117,10 +124,10 @@ class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, useGini : 
 	}
 }
 
-// extra classes
 class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int) {
 	val n = oTreeVal.ncols
 	val t = oTreeVal.nrows;
+	val newSortedIndices : IMat = iones(t, 1) * irow(0->n) // for new code
 	val sortedIndices : IMat = iones(1,1) * irow(0->n) //iones(t,1) * irow(0->n)
 	val treeOffsets = oTreeVal.izeros(1,t)
 	val nnodes = (math.pow(2, d) + 0.5).toInt
@@ -133,22 +140,69 @@ class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int) {
 
 	val eps = 1E-5.toFloat
 
-	// sorts everything!
-	// used outside 
-	def sortIndicesTreePosAndTreeVals {
-
-	}
-
-	// Gets the slice
-	// used inside loop
-	def getCurSortedIndicesCurTreeAndCurTreeVals {
-
-	}
-
+	/******************************************************************************************************************************
+	 * PUBLIC: newGetThresholdsAndUpdateTreesArray
+	 ******************************************************************************************************************************/
 	def newGetThresholdsAndUpdateTreesArray(treePos : Mat, oTreeVal : Mat, treesArray : Mat) {
-
+		val sortedI = oTreeVal.izeros(t, n)
+		sortedI <-- (newSortedIndices)
+		val sortedIT = sortedI.t
+		(treePos, oTreeVal, treeOffsets, sortedIT, cats, pcatst, treesArray) match {
+				case (tP: GIMat, oTV : GMat, tO : GIMat, sIT : GIMat, cts : GMat, pctst : GMat, tA : GIMat) => {
+					handleGPUGetThresholdsAndUpdateTreesArray(tP, oTV, tO, sIT, cts, pctst, tA)
+				}
+		}
 	}
 
+	private def handleGPUGetThresholdsAndUpdateTreesArray(tP: GIMat, oTV : GMat, tO : GIMat, sIT : GIMat, cts : GMat, pctsts : GMat, tA : GIMat) {
+		val o1 = getNewSortIndicesTTreePosTAndTreeValsT(sIT, tP, oTV)
+		val sTreePosT = o1._2
+		val soTreeValT = o1._3
+
+		var curT = 0
+		while (curT < t) {
+			val o2 = getCurTreePosCurTreeValAndAssociatedSortedCats(sIT, sTreePosT, soTreeValT, cts, pctsts, curT)
+			val curTreePosesT = o2._1
+			val curTreeValsT = o2._2
+			val fullTreeJC = getJCSegmentationForFullTree(curTreePosesT)
+			val fullImpurityReductions = calcInformationGain(pctsts, fullTreeJC, curTreePosesT) 
+			println("fullImpurityReductions")
+			println(fullImpurityReductions)
+			curT += 1
+		}
+	}
+
+	private def getNewSortIndicesTTreePosTAndTreeValsT(sIT : GIMat, tP : GIMat, oTV : GMat) : (GIMat, GIMat, GMat) = {
+		/* Make Copies of TreePos and TreeVals*/
+		val sTreePos : GIMat = (tP + GIMat(0)) // t, n
+		val sTreePosT : GIMat = sTreePos.t // n x t
+		val soTreeVal : GMat = (oTV + 0f) // t, n
+		val soTreeValT : GMat = soTreeVal.t // n x t
+
+		/* Sort it! */
+		lexsort2i(sTreePosT, soTreeValT, sIT)
+
+		(sIT, sTreePosT, soTreeValT)
+	}
+
+	private def getCurTreePosCurTreeValAndAssociatedSortedCats(sIT : GIMat, sTreePosT : GIMat, soTreeValT : GMat, cts : GMat, pctst : GMat, curT : Int) : (GIMat, GMat) = {
+		val curTreePoses = sTreePosT(GIMat(0->n), curT)
+		val curTreeIndices = sIT(GIMat(0->n), curT)
+		val curTreeVals = soTreeValT(GIMat(0->n), curT)
+
+		CUMAT.icopyt(curTreeIndices.data, cts.data, pctst.data, n, c, n)	
+		(curTreePoses, curTreeVals)
+	}
+
+	def getJCSegmentationForFullTree(curTreePoses : GIMat) : GIMat = {
+		val jcTemp : GMat = GMat.accum(curTreePoses, 1, null, nnodes, 1)
+		val jc = GIMat(IMat(0 on FMat(cumsumi(jcTemp, GIMat(0 on nnodes))))) // TODO: HACK
+		jc
+	}
+
+	/******************************************************************************************************************************
+	 * PUBLIC: getThresholdsAndUpdateTreesArray (OLD)
+	 ******************************************************************************************************************************/
 	def getThresholdsAndUpdateTreesArray(treePos : Mat, oTreeVal : Mat, treesArray : Mat) {
 		val t = oTreeVal.nrows
 
@@ -237,13 +291,9 @@ class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int) {
 					println(accumPctst)
 
 					println("calculating the impurityReduction")
-					val impurityReductions = calcInformationGain(accumPctst, jc, curTreePoses)
-					// val impurityReductions = GMat.calcImpurities(accumPctst , null, jc) //TODO:
-					// TODO: smoosh all the impurityReducts into a sum... using maxi?
+					val impurityReductions = calcInformationGain(pctst, jc, curTreePoses)
 
 					println(impurityReductions)
-					// var maxes : GMat = null
-					// var maxis : GIMat = null
 					println("JC2 for MAX")
 					val jc2 = jc(((tree_nnodes -1) until (2*tree_nnodes)), 0) // DO THE REMOVAL HERE!!! jc removing the stuff that doesnt matter...
 					println(jc2)
@@ -278,30 +328,33 @@ class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int) {
 					println("maxTreeProdVals")
 					println(maxTreeProdVals)
 
-					// val maxTreeProdValsTreesIndices = GIMat(curT*nnodes) + maxis
-					// println("maxTreeProdValsTreesIndices")
-					// println(maxTreeProdValsTreesIndices)
-
 					println("MARKING THE TREE PROD VALS IN TREESARRAY")
-					val tArray : GMat = new GMat(tA.nrows, tA.ncols, tA.data, tA.length)
-					tArray(0, GIMat((nnodes * curT + tree_nnodes -1)->(nnodes * curT + 2*tree_nnodes - 1))) = maxTreeProdVals.t
-					println("MARKING THE MAX CATEGORIES IN TREESARRAY")
-					markMaxCategories(tArray, tree_nnodes, nnodes, curT)
-					println("New TreesArray")
-					println(tArray)
-					println(treesArray)
+					markTreeProdVals(tA, maxTreeProdVals, tree_nnodes, nnodes, curT)
+					// println("MARKING THE MAX CATEGORIES IN TREESARRAY")
+					// markMaxCategories(tA, tree_nnodes, nnodes, curT);
+					println(tA)
 				}
 			}
 		}
 	}
 
-	def getBestCategories(tPos: GIMat, accumPctst : GMat, jc2 : GIMat) {
+	private def markTreeProdVals(tA: GIMat, maxTreeProdVals : GMat, tree_nnodes : Int, nnodes : Int, curT : Int) {
+		val tArray : GMat = new GMat(tA.nrows, tA.ncols, tA.data, tA.length)
+		tArray(0, GIMat((nnodes * curT + tree_nnodes -1)->(nnodes * curT + 2*tree_nnodes - 1))) = maxTreeProdVals.t
+		println("TreesArrays: Marked with TreeProds")
+		println(tArray)
+	}
+
+	private def getBestCategories(tPos: GIMat, accumPctst : GMat, jc2 : GIMat) {
 
 	}
 
-	def markMaxCategories(tArray : GMat, tree_nnodes : Int, nnodes : Int, curT : Int) {
-		// tArray(1, GIMat((nnodes * curT + tree_nnodes -1)->(nnodes * curT + 2*tree_nnodes))) = null
-	}
+	// def markMaxCategories(tA : GIMat, tree_nnodes : Int, nnodes : Int, curT : Int) {
+	// 	val tArray : GMat = new GMat(tA.nrows, tA.ncols, tA.data, tA.length)
+	// 	// tArray(1, GIMat((nnodes * curT + tree_nnodes -1)->(nnodes * curT + 2*tree_nnodes - 1))) = GMat(1000)
+	// 	println("TreesArrays: Marked with Max Categories")
+	// 	println(tArray)
+	// }
 
 	/**
 	 *
@@ -309,13 +362,19 @@ class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int) {
 	 * now we must further mark 0 for leaves that will have infogain deltas that are very little
 	 *
 	 */
-	def markLeaves(infoGain : GMat, maxis : GIMat) {
+	private def markLeaves(infoGain : GMat, maxis : GIMat) {
 		// 0.01 * infoGain.ones(infoGain.nrows, infoGain.ncols)
 		// inf
 	}
 
-	def calcInformationGain(leftAccumPctsts : GMat, jc : GIMat, curTreePoses : GIMat) : GMat = {
+	private def calcInformationGain(pctsts : GMat, jc : GIMat, curTreePoses : GIMat) : GMat = {
 		println("calcInformationGain")
+
+		/** Left Total Impurity */
+		println("LEFT IMPURITY STUFF")
+		val leftAccumPctsts = GMat.cumsumi(pctsts, jc, null)
+		val leftTots = sum(leftAccumPctsts, 2) * (leftAccumPctsts.zeros(1, leftAccumPctsts.ncols) + GMat(1))
+		val leftImpurity = getImpurityForInfoGain(leftAccumPctsts, leftTots)
 		
 		/** Total Impurity*/
 		println("TOTAL IMPURITY STUFF")
@@ -333,11 +392,6 @@ class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int) {
 		println(totsAccumPctsts)
 		val totsImpurity = getImpurityForInfoGain(totsAccumPctsts, totTots)
 
-		/** Left Total Impurity */
-		println("LEFT IMPURITY STUFF")
-		val leftTots = sum(leftAccumPctsts, 2) * (leftAccumPctsts.zeros(1, leftAccumPctsts.ncols) + GMat(1))
-		val leftImpurity = getImpurityForInfoGain(leftAccumPctsts, leftTots)
-
 		/** Right Total Impurity */
 		println("RIGHT IMPURITY STUFF")
 		val rightTots = totTots - leftTots
@@ -352,7 +406,7 @@ class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int) {
 		return infoGainSummed
 	}
 
-	def getImpurityForInfoGain(accumPctsts : GMat, tots : GMat) : GMat = {
+	private def getImpurityForInfoGain(accumPctsts : GMat, tots : GMat) : GMat = {
 		println("getImpurityForInfoGain")
 		println("accumPctsts")
 		println(accumPctsts)
@@ -371,13 +425,12 @@ class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int) {
 	}
 
 	
-	def calcGiniImpurityReduction(accumPctst : GMat, jc : GIMat) : GMat = {
+	private def calcGiniImpurityReduction(accumPctst : GMat, jc : GIMat) : GMat = {
 		// add some e val to 
 		return null
 	}
 
-	// DERRICK
-  	def lexsort2i(a : Mat, b: Mat, i : Mat) {
+  	private def lexsort2i(a : Mat, b: Mat, i : Mat) {
     	(a, b, i) match {
       	case (aa: GIMat, bb: GMat, ii : GIMat) => GMat.lexsort2i(aa, bb, ii)
     	}

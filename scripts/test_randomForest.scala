@@ -18,15 +18,15 @@ val y : DMat = load("../Data/bidmatSpamData.mat", "ytrain");
 
 def testGPURandomForest : RandomForest = {
 	val useGini = true
-	val d = 7
-	val t = 4
+	val d = 3
+	val t = 1
 	val ns = 2
-	val feats : GMat = GMat(x.t);
-	// val feats : GMat = GMat(21\4.0\2\3 on 31\7.0\1\15 on 1.0\2.0\9\12) 
+	// val feats : GMat = GMat(x.t);
+	val feats : GMat = GMat(21\4.0\2\3 on 31\7.0\1\15 on 1.0\2.0\9\12) 
 	val f : Int = feats.nrows;
 	val n : Int = feats.ncols;
-	val cats : GMat = GMat(((iones(n,1) * irow(0->2)) == y).t);
-	// val cats : GMat = GMat(0\1\0\0 on 1\0\1\1);
+	// val cats : GMat = GMat(((iones(n,1) * irow(0->2)) == y).t);
+	val cats : GMat = GMat(0\1\0\0 on 1\0\1\1);
 
 	val randomForest : RandomForest = new RandomForest(d, t, ns, feats, cats, useGini);
 	randomForest.train;
