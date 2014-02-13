@@ -116,7 +116,7 @@ class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, useGini : 
 	 			var curT = 0
 	 			while (curT < t) {
 	 				tArr(0,  tPos(curT, 0 -> n)) = scala.Float.NegativeInfinity * GMat(iones(1, n))
-	 				tArr(1,  tPos(curT, 0 -> n)) = GMat(100f)
+	 				tA(1,  tPos(curT, 0 -> n)) = GIMat(100)
 	 				curT = curT + 1
 	 			}
 	 		}
@@ -131,12 +131,11 @@ class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int) {
 	val sortedIndices : IMat = iones(1,1) * irow(0->n) //iones(t,1) * irow(0->n)
 	val treeOffsets = oTreeVal.izeros(1,t)
 	val nnodes = (math.pow(2, d) + 0.5).toInt
-	println("TreeOffsets")
+	val tree_nnodes = (math.pow(2, k) + 0.5).toInt;
 	treeOffsets <-- (nnodes * icol(0->t)) 
 	println(treeOffsets)
 	val c = cats.nrows;
 	val pcatst = oTreeVal.zeros(cats.ncols, cats.nrows);
-	println("WE ARE ON CURDEPTH: " + k)
 
 	val eps = 1E-5.toFloat
 
@@ -155,49 +154,69 @@ class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int) {
 	}
 
 	private def handleGPUGetThresholdsAndUpdateTreesArray(tP: GIMat, oTV : GMat, tO : GIMat, sIT : GIMat, cts : GMat, pctsts : GMat, tA : GIMat) {
-		val o1 = getNewSortIndicesTTreePosTAndTreeValsT(sIT, tP, oTV)
+		val o1 = getNewSortIndicesTTreePosTAndTreeValsT(sIT, tP, oTV, tO)
 		val sTreePosT = o1._2
 		val soTreeValT = o1._3
 
 		var curT = 0
 		while (curT < t) {
-			val o2 = getCurTreePosCurTreeValAndAssociatedSortedCats(sIT, sTreePosT, soTreeValT, cts, pctsts, curT)
+			val o2 = getCurTreePosCurTreeValAndAssociatedSortedCats(sIT, sTreePosT, soTreeValT, cts, pctsts, tO, curT)
 			val curTreePosesT = o2._1
 			val curTreeValsT = o2._2
-			val fullTreeJC = getJCSegmentationForFullTree(curTreePosesT)
-			val fullImpurityReductions = calcInformationGain(pctsts, fullTreeJC, curTreePosesT) 
-			println("fullImpurityReductions")
-			println(fullImpurityReductions)
+			val fullJCForCurTree = getJCSegmentationForFullTree(curTreePosesT)
+			val fullImpurityReductions = calcInformationGain(pctsts, fullJCForCurTree, curTreePosesT)
+			markThresholdsGivenReductions(fullImpurityReductions, curTreeValsT, tA, fullJCForCurTree, curT)
 			curT += 1
 		}
 	}
 
-	private def getNewSortIndicesTTreePosTAndTreeValsT(sIT : GIMat, tP : GIMat, oTV : GMat) : (GIMat, GIMat, GMat) = {
+	private def getNewSortIndicesTTreePosTAndTreeValsT(sIT : GIMat, tP : GIMat, oTV : GMat, tO : GIMat) : (GIMat, GIMat, GMat) = {
 		/* Make Copies of TreePos and TreeVals*/
 		val sTreePos : GIMat = (tP + GIMat(0)) // t, n
-		val sTreePosT : GIMat = sTreePos.t // n x t
+		val sTreePosT : GIMat = sTreePos.t + tO  // n x t
 		val soTreeVal : GMat = (oTV + 0f) // t, n
 		val soTreeValT : GMat = soTreeVal.t // n x t
 
 		/* Sort it! */
 		lexsort2i(sTreePosT, soTreeValT, sIT)
 
+		println("sIT")
+		println(sIT)
+		println("sTreePosT")
+		println(sTreePosT)
+		println("soTreeValT")
+		println(soTreeValT)
 		(sIT, sTreePosT, soTreeValT)
 	}
 
-	private def getCurTreePosCurTreeValAndAssociatedSortedCats(sIT : GIMat, sTreePosT : GIMat, soTreeValT : GMat, cts : GMat, pctst : GMat, curT : Int) : (GIMat, GMat) = {
-		val curTreePoses = sTreePosT(GIMat(0->n), curT)
-		val curTreeIndices = sIT(GIMat(0->n), curT)
-		val curTreeVals = soTreeValT(GIMat(0->n), curT)
+	private def getCurTreePosCurTreeValAndAssociatedSortedCats(sIT : GIMat, sTreePosT : GIMat, soTreeValT : GMat, cts : GMat, pctst : GMat, tO : GIMat, curT : Int) : (GIMat, GMat) = {
+		val curOffset : GIMat = GIMat(tO(0, curT))
+		val curTreePosesTTemp = sTreePosT(GIMat(0->n), curT) 
+		val curTreePosesT = curTreePosesTTemp - curOffset
+		val curTreeIndicesT = sIT(GIMat(0->n), curT)
+		val curTreeValsT = soTreeValT(GIMat(0->n), curT)
 
-		CUMAT.icopyt(curTreeIndices.data, cts.data, pctst.data, n, c, n)	
-		(curTreePoses, curTreeVals)
+		CUMAT.icopyt(curTreeIndicesT.data, cts.data, pctst.data, n, c, n)	
+		(curTreePosesT, curTreeValsT)
 	}
 
 	def getJCSegmentationForFullTree(curTreePoses : GIMat) : GIMat = {
 		val jcTemp : GMat = GMat.accum(curTreePoses, 1, null, nnodes, 1)
 		val jc = GIMat(IMat(0 on FMat(cumsumi(jcTemp, GIMat(0 on nnodes))))) // TODO: HACK
 		jc
+	}
+
+	def markThresholdsGivenReductions(impurityReductions : GMat, curTreeValsT : GMat, tA : GIMat, fullJC : GIMat, curT : Int) {
+		val partialJC = fullJC(((tree_nnodes -1) until (2*tree_nnodes)), 0)
+		val mxsimp = maxs(impurityReductions, partialJC)
+
+		val maxes = mxsimp._1
+		val maxis = mxsimp._2
+
+		val tempMaxis = maxis + GIMat(1)
+		val tempcurTreeValsT = GMat(scala.Float.NegativeInfinity on curTreeValsT)
+		val maxTreeProdVals = tempcurTreeValsT(tempMaxis, 0)
+		markTreeProdVals(tA, maxTreeProdVals, tree_nnodes, nnodes, curT)
 	}
 
 	/******************************************************************************************************************************

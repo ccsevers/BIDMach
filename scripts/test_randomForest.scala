@@ -18,8 +18,8 @@ val y : DMat = load("../Data/bidmatSpamData.mat", "ytrain");
 
 def testGPURandomForest : RandomForest = {
 	val useGini = true
-	val d = 3
-	val t = 1
+	val d = 7
+	val t = 3
 	val ns = 2
 	// val feats : GMat = GMat(x.t);
 	val feats : GMat = GMat(21\4.0\2\3 on 31\7.0\1\15 on 1.0\2.0\9\12) 
