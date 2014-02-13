@@ -44,26 +44,9 @@ class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, useGini : 
 	val treeTemp = IMat(f * rand(ns + 1, t * nnodes));
 	min(treeTemp, f-1, treeTemp);
 	treesArray <-- treeTemp;
-	// val treesArray : GIMat = GIMat.newOrCheckGIMat(ns + 1, t * nnodes, null, f.GUID, c.GUID, "randomForest_treesArray".##); // Fix? maybe don't need newOrCheck
 	val oTreePos = feats.izeros(t, n); 
 	val oTreeVal = feats.zeros(t, n)
-	//GIMat.newOrCheckGIMat(t, n, null, f.GUID, c.GUID, "randomForest_oTreeVal".##);
-
-	/* Variables needed for Train method */
-	// val treeOffsets : GIMat = GIMat(nnodes * irow(0->t));
-	// val treeOffsets = feats.izeros(1,t);
-	// treeOffsets <-- (nnodes * irow(0->t));
-	// val embeddedTreePosWithVals : GMat = GMat.newOrCheckGMat(2 * t, n, null); // 2 times because its long long
-	// val embeddedTreePosWithVals = feats.zeros(2 * t, n);
-	// val embeddedSortedIndices : GIMat = GIMat.newOrCheckGIMat(2 * t, n, null); // 2 times because its long long
-	// val embeddedSortedIndices = feats.izeros(2 * t, n);
-	// val zeroToN : GIMat = GIMat(icol(0->n));
-	// val zeroToN = feats.izeros(n, 1);
-	// zeroToN <-- icol(0->n);
-	// val pcats = GMat.newOrCheckGMat(cats.nrows, cats.ncols, null);
-	// val zeroMat : GIMat = GIMat(izeros(n,t));
-	// val zeroMat = feats.izeros(n,t); 
-
+	
 	def train {
 		for (k <- 0 until d - 1) { // d of them; each level
 			println("At Depth: " + k);
@@ -132,21 +115,6 @@ class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, useGini : 
 	 		}
 	 	}
 	}
-
-	// // DERRICK
- //  	// treeprod(unsigned int *trees, float *feats, int *tpos, int *otpos, int nrows, int ncols, int ns, int tstride, int ntrees, int doth)     
- //  	def treeProd(treesArray : Mat, feats : Mat, treePos : Mat, oTreeVal : Mat) {
- //   		val nrows = feats.nrows;
- //    	val ncols = feats.ncols;
- //    	val ns = treesArray.nrows;
- //    	val ntrees = treePos.nrows;
- //    	val tstride = ns * (treesArray.ncols / ntrees);
- //    	(treesArray, feats, treePos, oTreeVal) match {
- //      		case (tA : GIMat, fs : GMat, tP : GIMat, oTV : GMat) => GMat.treeProd(tA, fs, tP, oTV, nrows, ncols, ns, tstride, ntrees)
- //      		case (tA : GIMat, fs : GMat, tP : GIMat, oTI : GIMat) => GMat.treeSteps(tA, fs, tP, oTI, nrows, ncols, ns, tstride, ntrees, 1)
- //    	}
- //  	}
-
 }
 
 // extra classes
@@ -161,7 +129,7 @@ class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int) {
 	println(treeOffsets)
 	val c = cats.nrows;
 	val pcatst = oTreeVal.zeros(cats.ncols, cats.nrows);
-	println("curdepth: " + k)
+	println("WE ARE ON CURDEPTH: " + k)
 
 	val eps = 1E-5.toFloat
 
@@ -174,6 +142,10 @@ class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int) {
 	// Gets the slice
 	// used inside loop
 	def getCurSortedIndicesCurTreeAndCurTreeVals {
+
+	}
+
+	def newGetThresholdsAndUpdateTreesArray(treePos : Mat, oTreeVal : Mat, treesArray : Mat) {
 
 	}
 
@@ -398,60 +370,6 @@ class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int) {
 		return impurity 
 	}
 
-
-	def calcInformationGainDelta(accumPctst : GMat, jc : GIMat, curTreePoses : GIMat) : GMat = {
-		// add some e val to
-		println("accumPctst")
-		println(accumPctst)
-		println("jc")
-		println(jc)
-		println("curTreePoses")
-		println(curTreePoses)
-
-		/** for Total Impurity */
-		// val indices = jc(1 until jc.length, 0) - GIMat(1)
-		// println("indices")
-		// println(indices)
-		// val totVals = accumPctst(indices, GIMat(0 -> accumPctst.ncols))
-		// println("totVals")
-		// println(totVals)
-		// val tots = totVals(curTreePoses, GIMat(0 -> totVals.ncols)) + GMat(eps); // imp
-		
-		val totsTemps = jc(1 -> jc.length, 0)
-		println("totsTemps")
-		println(totsTemps)
-		val tots = GMat(totsTemps(curTreePoses, GIMat(0))) * (accumPctst.zeros(1, accumPctst.ncols) + GMat(1))
-		println("tots")
-		println(tots)
-		val rightAccumPctst = tots - accumPctst
-		println("rightAccumPctst")
-		println(rightAccumPctst)
-		println("asdfasdfa")
-		println(GMat(0->accumPctst.nrows).t)
-		println(accumPctst.zeros(1, accumPctst.ncols) + GMat(1))
-		println("aasdafasdf")
-		val tempIndices = GMat(1->(accumPctst.nrows + 1)).t * (accumPctst.zeros(1, accumPctst.ncols) + GMat(1))
-		println("tempIndices")
-		println(tempIndices)
-		val totEntropy = null // imp
-		val leftEntropy = null // imp
-		val rightEntropy = null // imp
-
-		val pses = (accumPctst / (tots + GMat(eps))); // imp
-		println("pses")
-		println(pses)
-		val conjpses = (GMat(1) - pses) + GMat(eps); // imp
-		println("conjpses")
-		println(conjpses)
-		println("ln(pses)")
-		println(ln(pses))
-		println("ln(conjpses)")
-		println(ln(conjpses))
-		val infoGain = GMat(-1 * sum((pses *@ ln(pses)) + (conjpses *@ ln(conjpses)),2))
-		println("infoGain")
-		println(infoGain)
-		return infoGain
-	}
 	
 	def calcGiniImpurityReduction(accumPctst : GMat, jc : GIMat) : GMat = {
 		// add some e val to 
