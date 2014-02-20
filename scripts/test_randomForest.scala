@@ -14,26 +14,51 @@ Mat.useCache = false;
 
 // Test Random Forest!
 val x : DMat = load("../Data/bidmatSpamData.mat", "Xtrain"); 
+val xTest : DMat = load("../Data/bidmatSpamData.mat", "Xtest");
 val y : DMat = load("../Data/bidmatSpamData.mat", "ytrain");
+val yTest : DMat = load("../Data/bidmatSpamData.mat", "ytest");
+
+def calcAccuracy(guess : Mat , actual : Mat) : Mat = {
+	println("calcAccuracy")
+	val correctness = (guess == actual)
+	val summed = sum(correctness)
+	println(correctness)
+	return summed/ (correctness.length.toFloat)
+}
+
 
 def testGPURandomForest : RandomForest = {
 	val impurityType = 1
-	val d = 2
+	val d = 12
 	val t = 1
 	val ns = 2
-	// val feats : GMat = GMat(x.t);
-	val feats : GMat = GMat(21\4.0\2\3 on 31\7.0\1\15 on 1.0\2.0\9\12) 
+	val feats : GMat = GMat(x.t);
+	// val feats : GMat = GMat(21\4.0\2\3 on 31\7.0\1\15 on 1.0\2.0\9\12) 
 	val f : Int = feats.nrows;
 	val n : Int = feats.ncols;
-	// val cats : GMat = GMat(((iones(n,1) * irow(0->2)) == y).t);
-	val cats : GMat = GMat(0\1\0\0 on 1\0\1\1);
+	val cats : GMat = GMat(((iones(n,1) * irow(0->2)) == y).t);
+	// val cats : GMat = GMat(0\1\1\0 on 1\0\0\1);
 
 	val randomForest : RandomForest = new RandomForest(d, t, ns, feats, cats, impurityType);
 	randomForest.train;
 	println(randomForest.treePos.nrows)
 	println(randomForest.treePos.ncols)
+
+
+
 	println("Starting Classification")
-	println(randomForest.classify(feats))
+	val testFeats = GMat(xTest.t)
+	val testN : Int = testFeats.ncols
+	val testCats : GMat = GMat(((iones(testN,1) * irow(0->2)) == yTest).t);
+	val guessTemp = randomForest.classify(testFeats)
+	val guess = GMat(guessTemp(1, 0->testN))
+	println("guess")
+	println(guess)
+	println("cats(1, 0->testN)")
+	println(cats(1, 0->testN))
+	val accuracy = calcAccuracy(guess, testCats(1, 0->testN))
+	println("accuracy")
+	println(accuracy)
 	randomForest
 }
 
