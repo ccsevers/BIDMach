@@ -114,15 +114,21 @@ class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, impurityTy
 	 * returned is n x 1
 	 */
 	private def voteForBestCategoriesAcrossTrees(treeCats : GIMat) : GIMat = {
-		// val treeCatsT = treeCats.t
-		// val accumedCats = accumG(treeCatsT, 2, numCats)
-		// println("accumedCats")
-		// println(accumedCats)
-		// val bundle = maxi2(FMat(accumedCats), 2)
-		// val majorityVal = bundle._1
-		// val majorityIndicies = bundle._2
-		// GIMat(majorityIndicies)
-		treeCats
+		val treeCatsT = treeCats.t
+		val accumedTreeCats = accumG(treeCatsT, 2, numCats)
+		println("treeCats")
+		println(treeCats)
+		println("accumedTreeCats")
+		println(accumedTreeCats)
+		// println("accumedTreeCats.t")
+		// println(accumedTreeCats.t)
+		val bundle = maxi2(FMat(accumedTreeCats), 2)
+		val majorityVal = bundle._1
+		val majorityIndicies = bundle._2
+		println("majorityIndicies")
+		println(majorityIndicies)
+		GIMat(majorityIndicies.t)
+		// treeCats
 	}
 
 	private def accumG(a : GIMat, dim : Int, numBuckets : Int)  : GMat = {
@@ -133,10 +139,9 @@ class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, impurityTy
 			}
 			case (2) => {
 				// row by row
-				val aT = a.t
 				val iTemp = GIMat(icol(0->a.nrows) * iones(1, a.ncols))
 				val i = reshape(iTemp, iTemp.length, 1)
-				val j = reshape(aT, aT.length, 1)
+				val j = reshape(a, a.length, 1)
 				val ij = i \ j
 				val omat = GMat.accum(ij, 1, null, a.nrows , numBuckets)
 				omat

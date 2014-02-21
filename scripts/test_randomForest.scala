@@ -30,8 +30,8 @@ def calcAccuracy(guess : Mat , actual : Mat) : Mat = {
 def testGPURandomForest : RandomForest = {
 	val numCats = 2
 	val impurityType = 1
-	val d = 7
-	val t = 1
+	val d = 5
+	val t = 30
 	val ns = 2
 	val feats : GMat = GMat(x.t);
 	// val feats : GMat = GMat(21\4.0\2\3 on 31\7.0\1\15 on 1.0\2.0\9\12) 
@@ -52,7 +52,7 @@ def testGPURandomForest : RandomForest = {
 	val testN : Int = testFeats.ncols
 	val testCats : GMat = GMat(((iones(testN,1) * irow(0->numCats)) == yTest).t);
 	val guessTemp = randomForest.classify(testFeats)
-	val guess = GMat(guessTemp(1, 0->testN))
+	val guess = GMat(guessTemp(0, 0->testN))
 	println("guess")
 	println(guess)
 	println("cats(1, 0->testN)")
