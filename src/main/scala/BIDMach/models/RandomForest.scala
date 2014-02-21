@@ -9,7 +9,7 @@ import edu.berkeley.bid.CUMAT
 /**
  * Random Forest Implementation
  */
-class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, impurityType : Int = 1) {
+class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, impurityType : Int = 1, numCats : Int) {
 	/*
 		Class Variables
 		n = # of samples
@@ -101,14 +101,52 @@ class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, impurityTy
 
 				saveAs("/home/derrick/code/NewRandomForest/BIDMach/tests/classify.mat", IMat(treesArray), "treesArray", FMat(fs), "fs", IMat(newTreePos), "newTreePos", IMat(treeCats), "treeCats")
 				GMat.treeSearch(treesArray, fs, newTreePos, treeCats)
-				treeCats
+				(treeCats) match {
+					case (tCats : GIMat) => {
+						return voteForBestCategoriesAcrossTrees(tCats)
+					}
+				}
 			}
 		}
 	}
 
+	/**
+	 * returned is n x 1
+	 */
 	private def voteForBestCategoriesAcrossTrees(treeCats : GIMat) : GIMat = {
-		val treeCatsT = treeCats.t
-		treeCatsT
+		// val treeCatsT = treeCats.t
+		// val accumedCats = accumG(treeCatsT, 2, numCats)
+		// println("accumedCats")
+		// println(accumedCats)
+		// val bundle = maxi2(FMat(accumedCats), 2)
+		// val majorityVal = bundle._1
+		// val majorityIndicies = bundle._2
+		// GIMat(majorityIndicies)
+		treeCats
+	}
+
+	private def accumG(a : GIMat, dim : Int, numBuckets : Int)  : GMat = {
+		(dim) match {
+			case (1) => {
+				// col by col
+				null
+			}
+			case (2) => {
+				// row by row
+				val aT = a.t
+				val iTemp = GIMat(icol(0->a.nrows) * iones(1, a.ncols))
+				val i = reshape(iTemp, iTemp.length, 1)
+				val j = reshape(aT, aT.length, 1)
+				val ij = i \ j
+				val omat = GMat.accum(ij, 1, null, a.nrows , numBuckets)
+				omat
+			}
+		}
+	} 
+
+	private def reshape(a : GIMat, newRows : Int, newCols : Int) : GIMat = {
+		val omat =  new GIMat(newRows, newCols, a.data, a.length)
+		omat
 	}
 	/**
 	 *
