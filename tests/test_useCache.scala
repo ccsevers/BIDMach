@@ -6,12 +6,12 @@ TODO CONCERNS:
 
 // :load /home/derrick/code/RandomForest/BIDMat/lib/test_randomForest.scala
 import edu.berkeley.bid.CUMAT
-import BIDMach.models.RandomForest
-import BIDMach.models.CPURandomForest
-// import BIDMach.models.EntropyEval
+import BIDMach.models.RandomForestUseCache
+//import BIDMat.CPURandomForest
+import BIDMach.models.EntropyEvalUseCache
 
 // Test Random Forest!
-Mat.useCache = false;
+Mat.useCache = true;
 
 val x : DMat = load("../Data/bidmatSpamData.mat", "Xtrain"); 
 val xTest : DMat = load("../Data/bidmatSpamData.mat", "Xtest");
@@ -27,11 +27,11 @@ def calcAccuracy(guess : Mat , actual : Mat) : Mat = {
 }
 
 
-def testGPURandomForest : RandomForest = {
+def testGPURandomForest : RandomForestUseCache = {
 	val numCats = 2
 	val impurityType = 1
-	val d = 11
-	val t = 32
+	val d = 7
+	val t = 1
 	val ns = 2
 	val feats : GMat = GMat(x.t);
 	// val feats : GMat = GMat(21\4.0\2\3 on 31\7.0\1\15 on 1.0\2.0\9\12) 
@@ -39,7 +39,7 @@ def testGPURandomForest : RandomForest = {
 	val n : Int = feats.ncols;
 	val cats : GMat = GMat(((iones(n,1) * irow(0->numCats)) == y).t);
 	// val cats : GMat = GMat(0\1\1\0 on 1\0\0\1);
-	val randomForest : RandomForest = new RandomForest(d, t, ns, feats, cats, impurityType, numCats);
+	val randomForest : RandomForestUseCache = new RandomForestUseCache(d, t, ns, feats, cats, impurityType, numCats);
 	randomForest.train;
 	println(randomForest.treePos.nrows)
 	println(randomForest.treePos.ncols)
@@ -54,38 +54,35 @@ def testGPURandomForest : RandomForest = {
 	val guess = GMat(guessTemp(0, 0->testN))
 	println("guess")
 	println(guess)
-	println("Num ones for Guess")
+	println("Num ones")
 	println(sum(guess))
-	println("Num Guess Total")
+	println("Num Total")
 	println(guess.ncols)
-	println("testCats(1, 0->testN)")
-	println(testCats(1, 0->testN))
-	println("num actual ones")
-	println(sum(testCats(1, 0->testN)))
+	println("cats(1, 0->testN)")
+	println(cats(1, 0->testN))
 	val accuracy = calcAccuracy(guess, testCats(1, 0->testN))
 	println("accuracy")
 	println(accuracy)
 	randomForest
 }
 
-def testCPURandomForest {
-	val d = 2;
-	val t = 2;
-	val ns = 2;
-	// val feats : GMat = GMat(x.t);
-	val feats : FMat = FMat(21\4.0\2\3 on 31\7.0\1\15 on 1.0\2.0\9\12) 
-	val f : Int = feats.nrows;
-	val n : Int = feats.ncols;
-	// val cats : GMat = GMat(((iones(n,1) * irow(0->2)) == y).t);
-	val cats : FMat = FMat(1\0\0\0 on 0\1\1\1);
+// def testCPURandomForest {
+// 	val d = 2;
+// 	val t = 2;
+// 	val ns = 2;
+// 	// val feats : GMat = GMat(x.t);
+// 	val feats : FMat = FMat(21\4.0\2\3 on 31\7.0\1\15 on 1.0\2.0\9\12) 
+// 	val f : Int = feats.nrows;
+// 	val n : Int = feats.ncols;
+// 	// val cats : GMat = GMat(((iones(n,1) * irow(0->2)) == y).t);
+// 	val cats : FMat = FMat(1\0\0\0 on 0\1\1\1);
 
-	val randomForest : CPURandomForest = new CPURandomForest(d, t, ns, feats, cats);
-	randomForest.train;
-}
+// 	val randomForest : CPURandomForest = new CPURandomForest(d, t, ns, feats, cats);
+// 	randomForest.train;
+// }
 
 // testCPURandomForest
 val rF = testGPURandomForest
-// val rF = testCPURandomForest
 
 /**
 	Testing TreeProd

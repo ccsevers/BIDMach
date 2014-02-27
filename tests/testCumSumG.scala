@@ -3,7 +3,9 @@ import BIDMach.models.RandomForest
 import BIDMach.models.EntropyEval
 
 // :load tests/testCumSumG.scala
-val numTimesToRun = 10
+val numTimesToRun = 20
+var i = 0
+while (i < numTimesToRun) {
 val matName = "/home/derrick/code/NewRandomForest/BIDMach/tests/leftImpurityCumSumG.mat"
 // saveAs(matName, FMat(pctsts), "pctsts", IMat(jc), "jc", FMat(leftAccumPctsts), "leftAccumPctsts")
 val pct : FMat = load(matName,"pctsts")
@@ -16,11 +18,8 @@ println("Running CumSumG:")
 val result = cumsumg(pctsts, jc, null);
 // println("Recorded Output")
 // println(leftAccumPctsts)
-var i = 0
-while (i < numTimesToRun) {
-	println("Iteration #" + i)
 	println("CumSumG Output:")
 	println(result)
 	i = i + 1
 }
-println("CumSumG is run multiple times. The Output of CumSumG is not always the same.)
+println("CumSumG is run multiple times. The Output of CumSumG is not always the same.")

@@ -9,7 +9,7 @@ import edu.berkeley.bid.CUMAT
 /**
  * Random Forest Implementation
  */
-class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, impurityType : Int = 1, numCats : Int) {
+class BothRandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, impurityType : Int = 1, numCats : Int) {
 	/*
 		Class Variables
 		n = # of samples
@@ -40,13 +40,6 @@ class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, impurityTy
 	val treePos = feats.izeros(t,n);//  GIMat.newOrCheckGIMat(t, n, null); 
 	treePos.clear
 	var treesArray = feats.izeros(ns + 1, t * nnodes);
-	var gTreesArray : GMat = null;
-	// TODO: 
-	(treesArray) match {
-		case (tA : GIMat) => {
-			gTreesArray = new GMat(tA.nrows, tA.ncols, tA.data, tA.length)
-		} 
-	}
 	val treeTemp = IMat(f * rand(ns + 1, t * nnodes));
 	min(treeTemp, f-1, treeTemp);
 	treesArray <-- treeTemp;
@@ -68,7 +61,7 @@ class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, impurityTy
    			println("Starting treeProd")
    			GMat.treeProd(treesArray, feats, treePos, oTreeVal);
 
-			val e = new EntropyEval(oTreeVal, cats, d, k, impurityType)
+			val e = new BothEntropyEval(oTreeVal, cats, d, k, impurityType)
 			e.newGetThresholdsAndUpdateTreesArray(treePos, oTreeVal, treesArray)
 
 			println("Starting TreeStep")
@@ -93,8 +86,6 @@ class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, impurityTy
 				val treeCats = feats.izeros(t, fs.ncols)
 				treeCats.clear
 				println("Yea: NewTreePos: " + newTreePos)
-
-				saveAs("/home/derrick/code/NewRandomForest/BIDMach/tests/classify.mat", IMat(treesArray), "treesArray", FMat(fs), "fs", IMat(newTreePos), "newTreePos", IMat(treeCats), "treeCats")
 				GMat.treeSearch(treesArray, fs, newTreePos, treeCats)
 				(treeCats) match {
 					case (tCats : GIMat) => {
@@ -155,7 +146,7 @@ class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, impurityTy
 	 	(tArray, tPos) match {
 			case (tA : GIMat, tPos : GIMat) => {
 				// TODO: do a sort here?
-				val c = new EntropyEval(oTreeVal, cats, d, d, impurityType) // TODO: Change name if good...
+				val c = new BothEntropyEval(oTreeVal, cats, d, d, impurityType) // TODO: Change name if good...
 				val tArr : GMat = new GMat(tA.nrows, tA.ncols, tA.data, tA.length)
 	 			var curT = 0
 	 			while (curT < t) {
@@ -166,13 +157,136 @@ class RandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat, impurityTy
 	 		}
 	 	}
 	}
+
+	/******************************************************************************************************************************
+	 * BOTH Code
+	 ******************************************************************************************************************************/
+	 def treeProd(treesArray : Mat, feats : Mat, treePos : Mat, oTreeVal : Mat) {
+		(treesArray, feats, treePos, oTreeVal) match {
+			case (tA: FMat, fs : FMat, tP : IMat, oTV : FMat) => {
+				println("Before: treePos:\n" + treePos)
+				println("Before: oTV:\n" + oTV)
+				treeProd(tA, fs, tP, oTV, false)
+				println("After: oTV:\n" + oTV)
+				println("After: treePos:\n" + treePos)
+			}
+			case (tA: FMat, fs : FMat, tP : IMat, tP2 : IMat) => {
+				println("Before: treePos:\n" + treePos)
+				treeSteps(tA, fs, tP, tP2, true)
+				println("After: NEWtreePos:\n" + oTreeVal)
+			}
+			case (tA: GMat, fs : GMat, tP : GIMat, oTV : GMat) => {
+				println("Before: treePos:\n" + treePos)
+				println("Before: oTV:\n" + oTV)
+				GMat.treeProd(tA, fs, tP, oTV)
+				println("After: oTV:\n" + oTV)
+				println("After: treePos:\n" + treePos)
+			}
+			case (tA: GMat, fs : GMat, tP : GIMat, tP2 : GIMat) => {
+				println("Before: treePos:\n" + treePos)
+				GMat.treeProd(tA, fs, tP, tP2)
+				println("After: NEWtreePos:\n" + oTreeVal)
+			}
+		}
+	}
+
+	/******************************************************************************************************************************
+	 * CPU Code
+	 ******************************************************************************************************************************/
+	def treeProd(treesArray : FMat, feats : FMat, treePos : IMat, oTreeVal : FMat, isTreeSteps : Boolean) {
+		val t = oTreeVal.nrows
+		val n = oTreeVal.ncols
+		val nnodes = treesArray.ncols / t
+		val ns = treesArray.nrows - 1
+		var tt = 0
+		while (tt < t) {
+			var curNodePos = 0
+			var treesArrayIndex = 0
+			var treesArrayVals : FMat = null
+			var threshold : Float = 0
+			var nn = 0
+			while (nn < n) {
+				println("tt: " + tt + " nn: " + nn)
+				var curTreeProdSum : Float = 0
+				curNodePos = treePos(tt, nn)
+				treesArrayIndex = tt * nnodes + curNodePos
+				threshold = treesArray(0, treesArrayIndex)
+				treesArrayVals = treesArray(1->(ns+1), treesArrayIndex -> (treesArrayIndex + 1))
+				var ii = 0
+				var refFeatVal : Float = 0
+				while (ii < treesArrayVals.nrows) {
+					refFeatVal = feats(IMat(treesArrayVals(ii, 0)), nn)(0,0)
+					curTreeProdSum += refFeatVal
+					ii = ii + 1
+				}
+				var isLeaf = (threshold == scala.Float.NegativeInfinity)
+				if (!isTreeSteps) {
+					if (!isLeaf) {
+						oTreeVal(tt, nn) = curTreeProdSum 
+					}
+				} else {
+					if (!isLeaf) {
+						if (curTreeProdSum > threshold) {
+							oTreeVal(tt, nn) = 2 * curNodePos + 2
+						} else {
+							oTreeVal(tt, nn) = 2 * curNodePos + 1
+						}
+					}
+				}
+				nn = nn + 1	
+			}
+			tt = tt + 1
+		}
+	}
+
+	def treeSteps(treesArray : FMat, feats : FMat, treePos : IMat, oTreePos : IMat, isTreeSteps : Boolean) {
+		val t = oTreeVal.nrows
+		val n = oTreeVal.ncols
+		val nnodes = treesArray.ncols / t
+		val ns = treesArray.nrows - 1
+		var tt = 0
+		while (tt < t) {
+			var curNodePos = 0
+			var treesArrayIndex = 0
+			var treesArrayVals : FMat = null
+			var threshold : Float = 0
+			var nn = 0
+			while (nn < n) {
+				println("tt: " + tt + " nn: " + nn)
+				var curTreeProdSum : Float = 0
+				curNodePos = treePos(tt, nn)
+				treesArrayIndex = tt * nnodes + curNodePos
+				threshold = treesArray(0, treesArrayIndex)
+				treesArrayVals = treesArray(1->(ns+1), treesArrayIndex -> (treesArrayIndex + 1))
+				var ii = 0
+				var refFeatVal : Float = 0
+				while (ii < treesArrayVals.nrows) {
+					refFeatVal = feats(IMat(treesArrayVals(ii, 0)), nn)(0,0)
+					curTreeProdSum += refFeatVal
+					ii = ii + 1
+				}
+				var isLeaf = (threshold == scala.Float.NegativeInfinity)
+				if (isTreeSteps) {
+					if (!isLeaf) {
+						if (curTreeProdSum > threshold) {
+							oTreePos(tt, nn) = 2 * curNodePos + 2
+						} else {
+							oTreePos(tt, nn) = 2 * curNodePos + 1
+						}
+					}
+				}
+				nn = nn + 1	
+			}
+			tt = tt + 1
+		}
+	}	 
 }
 
 /**
  * EntropyEval:
  * Given the current depth marks the treesArray with the right thresholds
  */
-class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType : Int) {
+class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType : Int) {
 	val n = oTreeVal.ncols
 	val t = oTreeVal.nrows;
 	val newSortedIndices : IMat = iones(t, 1) * irow(0->n) // for new code
@@ -487,9 +601,91 @@ class EntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType : I
     	}
   	}
 
-  	/******************************************************************************************************************************
-	 * DEPRECATED CODE:
+
+	 /******************************************************************************************************************************
+	 * GPU Code
 	 ******************************************************************************************************************************/
 
+
+}
+
+class BIDMatHelpers {
+
+}
+
+object BIDMatHelpers {
+
+	def icopyT(indices : IMat, in : FMat) : FMat =  {
+		val o = in(irow(0 until in.nrows), indices)
+		o.t
+	}
+
+	def cumsumg(in : FMat,  jc : IMat, omat : FMat) : FMat = {
+		if (jc.length < 2) {
+			throw new RuntimeException("cumsumg error: invalid arguments")
+		}
+		val out = FMat.newOrCheckFMat(in.nrows, in.ncols, omat, in.GUID, jc.GUID, "cumsumg".##)
+		var nc = 0
+		while (nc < in.ncols) {
+			var j = 0
+			var start = 0
+			var end = 0
+			var sumSoFar = 0f
+			while (j < (jc.length - 1)) {
+				start = jc(j, 0)
+				end = jc(j + 1, 0)
+				var gr = start
+				while (gr < end) {
+					sumSoFar += in(gr, nc).toFloat
+					out(gr, nc) = sumSoFar
+					gr += 1
+				}
+				j += 1
+			}
+			nc += 1
+		}
+		out 
+	}
+
+	def maxg(in : FMat, jc : IMat, omat : FMat, omati : IMat) : (FMat, IMat) = {
+		if (jc.length < 2) {
+			throw new RuntimeException("maxg error: invalid arguments")
+		}
+		val out = FMat.newOrCheckFMat(jc.length-1, in.ncols, omat, in.GUID, jc.GUID, "maxg".##)
+		val outi = IMat.newOrCheckIMat(jc.length-1, in.ncols, omati, in.GUID, jc.GUID, "maxg_i".##)
+		var nc = 0
+		while (nc < in.ncols) {
+			var j = 0
+			var start = 0
+			var end = 0
+			var maxSoFar = scala.Float.NegativeInfinity
+			var maxiSoFar = -1
+			while (j < (jc.length - 1)) {
+				start = jc(j, 0)
+				end = jc(j + 1, 0)
+				var gr = start
+				while (gr < end) {
+					if (in(gr, nc) > maxSoFar) {
+						maxSoFar = in(gr, nc)
+						maxiSoFar = gr
+					}
+					gr += 1
+				}
+				out(j, nc) = maxSoFar
+				outi(j, nc) = maxiSoFar
+				j += 1
+			}
+			nc += 1
+		}
+		(out, outi)
+	}
+
+	// TODO: 
+	def lexsort2i(a:IMat, b:FMat, i:IMat) {
+		// val ab = GMat.embedmat(a,b)
+		// val err = CUMAT.lsortk(ab.data, i.data, i.length, 1);
+		// if (err != 0) throw new RuntimeException("lexsort2i error %d: " + cudaGetErrorString(err) format err);
+		// GMat.extractmat(a, b, ab);
+	}
 
 }
