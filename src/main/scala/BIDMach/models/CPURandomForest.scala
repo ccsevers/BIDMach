@@ -53,7 +53,7 @@ class CPURandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat) {
 			println("TreeProd: Values Stored")
 			// CPURandomForest.treeProd(treesArray, feats, treePos, oTreeVal, false)
 			// println("TreeProd: Next Pos Values Stored")
-			CPURandomForest.treeProd(treesArray, feats, treePos, oTreePos, true)
+			// CPURandomForest.treeProd(treesArray, feats, treePos, oTreePos, true)
 			treePos <-- oTreePos
 			k = k + 1
 		}
@@ -62,24 +62,64 @@ class CPURandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat) {
 	object CPURandomForest {
 
 
-		def treeProd(treesArray : Mat, feats : Mat, treePos : Mat, oTreeVal : Mat, isTreeSteps : Boolean) {
-			(treesArray, feats, treePos, oTreeVal) match {
-				case (tA: FMat, fs : FMat, tP : IMat, oTV : FMat) => {
-					println("Before: treePos:\n" + treePos)
-					println("Before: oTV:\n" + oTV)
-					CPURandomForest.treeProd(tA, fs, tP, oTV, isTreeSteps)
-					println("After: oTV:\n" + oTV)
-					println("After: treePos:\n" + treePos)
+		// def treeProd(treesArray : Mat, feats : Mat, treePos : Mat, oTreeVal : Mat) {
+		// 	(treesArray, feats, treePos, oTreeVal) match {
+		// 		case (tA: FMat, fs : FMat, tP : IMat, oTV : FMat) => {
+		// 			println("Before: treePos:\n" + treePos)
+		// 			println("Before: oTV:\n" + oTV)
+		// 			CPURandomForest.treeProd(tA, fs, tP, oTV, true)
+		// 			println("After: oTV:\n" + oTV)
+		// 			println("After: treePos:\n" + treePos)
+		// 		}
+		// 		case (tA: FMat, fs : FMat, tP : IMat, tP2 : IMat) => {
+		// 			println("Before: treePos:\n" + treePos)
+		// 			CPURandomForest.treeSteps(tA, fs, tP, tP2, false)
+		// 			println("After: NEWtreePos:\n" + oTreeVal)
+		// 		}
+		// 	}
+		// }
+
+		def treeProd(treesArray : IMat, treesArrayF : FMat, feats : FMat, treePos : IMat, oTreeVal : FMat, treePos2 : IMat, isTreeSteps : Boolean) {
+			val t = oTreeVal.nrows
+			val n = oTreeVal.ncols
+			val nnodes = treesArray.ncols / t
+			val ns = treesArray.nrows - 1
+			var tt = 0
+			while (tt < t) {
+				var curNodePos = 0
+				var treesArrayIndex = 0 // corresponding index of nodePos in treesArray
+				var threshold = 0f
+				var nn = 0
+				while (nn < n) {
+					curNodePos = treePos(tt, nn)
+					treesArrayIndex = tt * nnodes + curNodePos
+					threshold = treesArrayF(0, treesArrayIndex)
+					var isAtLeaf = (threshold == scala.Float.NegativeInfinity)
+					if (!isAtLeaf) {
+						var nsns = 0
+						var featIndex = 0
+						var curSum = 0f
+						while (nsns < ns) {
+							featIndex = treesArray(nsns + 1, treesArrayIndex)
+							curSum += (feats(featIndex, nn))
+						}
+						if (!isTreeSteps) {
+							oTreeVal(tt, nn) = curSum 
+						} else {
+							if (curSum > threshold) {
+								treePos2(tt, nn) = 2 * curNodePos + 2
+							} else {
+								treePos2(tt, nn) = 2 * curNodePos + 1
+							}
+						}
+					}
+					nn += 1
 				}
-				case (tA: FMat, fs : FMat, tP : IMat, tP2 : IMat) => {
-					println("Before: treePos:\n" + treePos)
-					CPURandomForest.treeSteps(tA, fs, tP, tP2, isTreeSteps)
-					println("After: NEWtreePos:\n" + oTreeVal)
-				}
+				tt += 1
 			}
 		}
 
-		def treeProd(treesArray : FMat, feats : FMat, treePos : IMat, oTreeVal : FMat, isTreeSteps : Boolean) {
+		def v0TreeProd(treesArray : FMat, feats : FMat, treePos : IMat, oTreeVal : FMat, isTreeSteps : Boolean) {
 			val t = oTreeVal.nrows
 			val n = oTreeVal.ncols
 			val nnodes = treesArray.ncols / t
@@ -101,7 +141,7 @@ class CPURandomForest(d : Int, t: Int, ns: Int, feats : Mat, cats : Mat) {
 					var ii = 0
 					var refFeatVal : Float = 0
 					while (ii < treesArrayVals.nrows) {
-						refFeatVal = feats(IMat(treesArrayVals(ii, 0)), nn)(0,0)
+						refFeatVal = feats(treesArrayVals(ii, 0).toInt, nn)
 						curTreeProdSum += refFeatVal
 						ii = ii + 1
 					}
