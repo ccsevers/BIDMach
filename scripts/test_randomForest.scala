@@ -32,8 +32,8 @@ def testBothRandomForest : BothRandomForest = {
 	val numCats = 2
 	val impurityType = 1
 	val d = 5
-	val t = 1
-	val ns = 3
+	val t = 7
+	val ns = 2
 	val feats : GMat = GMat(x.t);
 	// val feats : GMat = GMat(21\4.0\2\3 on 31\7.0\1\15 on 1.0\2.0\9\12) 
 	val f : Int = feats.nrows;
@@ -48,8 +48,8 @@ def testBothRandomForest : BothRandomForest = {
 	println(randomForest.treePos.ncols)
 
 
-
 	println("Starting Classification")
+	GPUmem
 	val testFeats = GMat(xTest.t)
 	val testN : Int = testFeats.ncols
 	val testCats : GMat = GMat(((iones(testN,1) * irow(0->numCats)) == yTest).t);
