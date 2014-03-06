@@ -67,7 +67,6 @@ def testTreeProd(gRForest : BothRandomForest, cRForest : BothRandomForest) {
 	println(compare(gRForest.oTreeVal, cRForest.oTreeVal))
 }
 
-def test
 /*
 
 /**

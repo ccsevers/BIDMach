@@ -27,8 +27,26 @@ def calcAccuracy(guess : Mat , actual : Mat) : Mat = {
 	return summed/ (correctness.length.toFloat)
 }
 
+def testCPUBothRandomForest : BothRandomForest = {
+	val numCats = 2
+	val impurityType = 1
+	val d = 4
+	val t = 1
+	val ns = 2
+	val feats : FMat = FMat(x.t);
+	val f : Int = feats.nrows;
+	val n : Int = feats.ncols;
+	val cats : FMat = FMat(((iones(n,1) * irow(0->numCats)) == y).t);
+
+	val randomForest : BothRandomForest = new BothRandomForest(d, t, ns, feats, cats, impurityType, numCats);
+	println("BothRandomForest: Train")
+	randomForest.train;
+
+	randomForest
+}
 
 def testBothRandomForest : BothRandomForest = {
+	println("testBothRandomForest")
 	val numCats = 2
 	val impurityType = 1
 	val d = 4
@@ -129,8 +147,8 @@ def testCPURandomForest {
 
 // val rF = testGPURandomForest
 // val rF = testCPURandomForest
-val rF = testBothRandomForest
-
+// val rF = testBothRandomForest
+val rF = testCPUBothRandomForest
 
 /**
 	Testing TreeProd

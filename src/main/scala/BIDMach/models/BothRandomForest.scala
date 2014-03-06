@@ -239,8 +239,8 @@ class BothRandomForest(d : Int, t: Int, ns: Int, fs : Mat, cs : Mat, impurityTyp
 	 * CPU Code
 	 ******************************************************************************************************************************/
 	def treeProd(treesArray : IMat, treesArrayF : FMat, feats : FMat, treePos : IMat, oTreeVal : FMat, treePos2 : IMat, isTreeSteps : Boolean) {
-		val t = oTreeVal.nrows
-		val n = oTreeVal.ncols
+		val t = treePos.nrows
+		val n = treePos.ncols
 		val nnodes = treesArray.ncols / t
 		val ns = treesArray.nrows - 1
 		var tt = 0
@@ -423,6 +423,7 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 			println("curTreeVals")
 			println(curTreeValsT.t)
 			val fullJCForCurTree = getJCSegmentationForFullTree(curTreePosesT)
+			val partialJCForCurTree = fullJCForCurTree(((tree_nnodes -1) until (2*tree_nnodes)), 0)
 			val fullImpurityReductions = calcImpurityReduction(pctsts, fullJCForCurTree, curTreePosesT)
 			markThresholdsGivenReductions(fullImpurityReductions, curTreeValsT, tA, tAFG, fullJCForCurTree, curT)
 			curT += 1
@@ -468,6 +469,9 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 			case (cTPTTemp : GIMat, cO : GIMat) => {
 				curTreePosesT = cTPTTemp - cO
 			}
+			case _ => {
+				curTreePosesT = curTreePosesTTemp - curOffset
+			}
 		}
 		val curTreeIndicesT = sIT(0->n, curT)
 		val curTreeValsT = soTreeValT(0->n, curT)
@@ -489,6 +493,9 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 			case (p : GMat) => {
 				(curTreePosesT, curTreeValsT, p)
 			}
+			case _ => {
+				(curTreePosesT, curTreeValsT, pcats)
+			}
 		}
 	}
 
@@ -503,6 +510,17 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 				println(jc.t)
 				jc
 			}
+			case _ => {
+				val jcTemp = accum(curTreePoses, 1, null, nnodes, 1)
+				println("getJC - jcTemp.t")
+				println(jcTemp.t)
+				println("getJCSegmentationForFullTree")
+				val jc = 0 on BIDMatHelpers.cumsumg(jcTemp, 0 on nnodes)
+				println("getJC - calculated jc.t")
+				println(jc.t)
+				jc
+			}
+
 		}
 	}
 
@@ -537,7 +555,7 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 	}
 
 	private def markTreeProdVals(tA: Mat, tAFG : Mat, maxTreeProdVals : Mat, tree_nnodes : Int, nnodes : Int, curT : Int) {
-		val indiciesToMark = GIMat((nnodes * curT + tree_nnodes -1)->(nnodes * curT + 2*tree_nnodes - 1))
+		val indiciesToMark = (nnodes * curT + tree_nnodes -1)->(nnodes * curT + 2*tree_nnodes - 1) //GIMat((nnodes * curT + tree_nnodes -1)->(nnodes * curT + 2*tree_nnodes - 1))
 		println("Indicies to Mark: ")
 		println(indiciesToMark)
 		println("What to Mark: ")
@@ -665,9 +683,10 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 	}
 
   	private def lexsort2i(a : Mat, b: Mat, i : Mat) {
+  		println("lexsort2i")
     	(a, b, i) match {
       	case (aa: GIMat, bb: GMat, ii : GIMat) => GMat.lexsort2i(aa, bb, ii);
-      	case (aa: IMat, bb: FMat, ii : IMat) => lexsort2i(aa, bb, ii)
+      	case (aa: IMat, bb: FMat, ii : IMat) => BIDMatHelpers.lexsort2iCPU(aa, bb, ii)
     	}
   	}
 
@@ -715,7 +734,38 @@ object BIDMatHelpers {
 				println("CPU Version")
 				cumsumg(i, j, null)
 			}
+			case (i : IMat, j : IMat) => {
+				println("CPU Version")
+				cumsumg(i, j, null)
+			}
 		}
+	}
+
+	def cumsumg(in : IMat,  jc : IMat, omat : IMat) : IMat = {
+		if (jc.length < 2) {
+			throw new RuntimeException("cumsumg error: invalid arguments")
+		}
+		val out = IMat.newOrCheckIMat(in.nrows, in.ncols, omat, in.GUID, jc.GUID, "cumsumg".##)
+		var nc = 0
+		while (nc < in.ncols) {
+			var j = 0
+			var start = 0
+			var end = 0
+			var sumSoFar = 0
+			while (j < (jc.length - 1)) {
+				start = jc(j, 0)
+				end = jc(j + 1, 0)
+				var gr = start
+				while (gr < end) {
+					sumSoFar += in(gr, nc)
+					out(gr, nc) = sumSoFar
+					gr += 1
+				}
+				j += 1
+			}
+			nc += 1
+		}
+		out 
 	}
 
 	def cumsumg(in : FMat,  jc : IMat, omat : FMat) : FMat = {
@@ -789,7 +839,7 @@ object BIDMatHelpers {
 		(out, outi)
 	}
 
-	def lexsort2i(a : IMat, b : FMat, i : IMat) = {
+	def lexsort2iCPU(a : IMat, b : FMat, i : IMat) = {
 		lexsort2iArr(a.data, b.data, i.data)
 	}
 
