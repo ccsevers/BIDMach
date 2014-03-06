@@ -308,10 +308,28 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 		val sortedI = oTreeVal.izeros(t, n)
 		sortedI <-- (newSortedIndices)
 		val sortedIT = sortedI.t
-		(treePos, oTreeVal, treeOffsets, sortedIT, cats, treesArray) match {
-				case (tP: GIMat, oTV : GMat, tO : GIMat, sIT : GIMat, cts : GMat, tA : GIMat) => {
-					handleGPUCategorize(tP, oTV, tO, sIT, cts, tA)
-				}
+		// (treePos, oTreeVal, treeOffsets, sortedIT, cats, treesArray) match {
+		// 		case (tP: GIMat, oTV : GMat, tO : GIMat, sIT : GIMat, cts : GMat, tA : GIMat) => {
+		// 			handleGPUCategorize(tP, oTV, tO, sIT, cts, tA)
+		// 		}
+		// }
+		handleCategorize(treePos, oTreeVal, treeOffsets, sortedIT, cats, treesArray)
+	}
+
+	private def handleCategorize(tP: Mat, oTV : Mat, tO : Mat, sIT : Mat, cts : Mat, tA : Mat) {
+		val o1 = getNewSortIndicesTTreePosTAndTreeValsT(sIT, tP, oTV, tO)
+		val sTreePosT = o1._2
+		val soTreeValT = o1._3
+
+		var curT = 0
+		while (curT < t) {
+			val o2 = getCurTreePosCurTreeValAndAssociatedSortedCats(sIT, sTreePosT, soTreeValT, cts, tO, curT)
+			val curTreePosesT = o2._1
+			val curTreeValsT = o2._2
+			val pctsts = o2._3
+			val fullJCForCurTree = getJCSegmentationForFullTree(curTreePosesT)
+			markBestCategories(tP, pctsts, fullJCForCurTree, tA, curT)
+			curT += 1
 		}
 	}
 
@@ -423,6 +441,7 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 			println("curTreeVals")
 			println(curTreeValsT.t)
 			val fullJCForCurTree = getJCSegmentationForFullTree(curTreePosesT)
+			// TODO: maybe not needed
 			val partialJCForCurTree = fullJCForCurTree(((tree_nnodes -1) until (2*tree_nnodes)), 0)
 			val fullImpurityReductions = calcImpurityReduction(pctsts, fullJCForCurTree, curTreePosesT)
 			markThresholdsGivenReductions(fullImpurityReductions, curTreeValsT, tA, tAFG, fullJCForCurTree, curT)
@@ -567,6 +586,13 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 		println(tA)
 	}
 
+	// works for iMat now
+	private def markNegOnesAsZero(a : Mat) : Mat = {
+		val mask = a >= 0 // to keep
+		val x = a.izeros(a.nrows, a.ncols)
+		(a *@ mask)
+	}
+
 	private def calcImpurityReduction(pctsts : Mat, jc : Mat, curTreePoses : Mat) : Mat = {
 		println("calcImpurityReduction")
 
@@ -600,6 +626,8 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 			}
 			case _ => {
 				totsTempMinusOne = totsTemps - 1
+				println("Marking totsTemp with zeros")
+				totsTempMinusOne = markNegOnesAsZero(totsTempMinusOne)
 			}
 		}
 		val totsAccumPctstsTemps = leftAccumPctsts(totsTempMinusOne, 0->leftAccumPctsts.ncols)
