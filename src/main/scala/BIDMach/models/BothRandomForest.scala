@@ -185,18 +185,22 @@ class BothRandomForest(d : Int, t: Int, ns: Int, fs : Mat, cs : Mat, impurityTyp
 	 *
 	 */
 	private def markAllCurPositionsAsLeavesAndCategorizeThem(tArray : Mat, tAFG : Mat, tPos : Mat) {
-	 	(tArray, tAFG, tPos) match {
-			case (tA : GIMat, tArrFG : GMat, tPos : GIMat) => {
+	 	// (tArray, tAFG, tPos) match {
+			// case (tA : GIMat, tArrFG : GMat, tPos : GIMat) => {
 				// TODO: do a sort here?
-				val c = new BothEntropyEval(oTreeVal, cats, d, d, impurityType) // TODO: Change name if good...
-	 			var curT = 0
-	 			while (curT < t) {
-	 				tArrFG(0,  tPos(curT, 0 -> n) + curT * nnodes) = scala.Float.NegativeInfinity * GMat(iones(1, n))
-		 			c.categorize(tPos, oTreeVal, tArray) 
-	 				curT = curT + 1
-	 			}
-	 		}
-	 	}
+		val c = new BothEntropyEval(oTreeVal, cats, d, d, impurityType) // TODO: Change name if good...
+		var curT = 0
+		while (curT < t) {
+			if (useGPU) {
+				tAFG(0,  GIMat(tPos(curT, 0 -> n)) + curT * nnodes) = scala.Float.NegativeInfinity * GMat(iones(1, n))
+			} else {
+				tAFG(0,  tPos(curT, 0 -> n) + curT * nnodes) = scala.Float.NegativeInfinity * iones(1, n)
+			}
+ 			c.categorize(tPos, oTreeVal, tArray) 
+			curT = curT + 1
+		}
+	 		// }
+	 	// }
 	}
 
 	/******************************************************************************************************************************
@@ -281,6 +285,7 @@ class BothRandomForest(d : Int, t: Int, ns: Int, fs : Mat, cs : Mat, impurityTyp
  * Given the current depth marks the treesArray with the right thresholds
  */
 class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType : Int) {
+	val useGPU = oTreeVal match {case oTV:GMat => true; case _ => false };
 	val n = oTreeVal.ncols
 	val t = oTreeVal.nrows;
 	val newSortedIndices : IMat = iones(t, 1) * irow(0->n) // for new code
@@ -328,19 +333,19 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 	}
 
 	// should be ready
-	private def markBestCategories(tPos: GIMat, pctsts : GMat, fullJCForCurTree : GIMat, tA : GIMat, curT : Int) {
+	private def markBestCategories(tPos: Mat, pctsts : Mat, fullJCForCurTree : Mat, tA : Mat, curT : Int) {
 		println("pctsts")
 		println(pctsts)
 		println("fullJCForCurTree")
 		println(fullJCForCurTree.t)
-		val accumPctst = cumsumg(pctsts, fullJCForCurTree, null)
+		val accumPctst = BIDMatHelpers.cumsumg(pctsts, fullJCForCurTree)
 		println("accumPctst")
 		println(accumPctst)
 		println("accumPctst.nrows")
 		println(accumPctst.nrows)
 		println("accumPctst.ncols")
 		println(accumPctst.ncols)
-		val tempBundle = maxg(accumPctst, fullJCForCurTree)
+		val tempBundle = BIDMatHelpers.maxg(accumPctst, fullJCForCurTree)
 		val totCatsPerGroup = tempBundle._1
 		println("totCatsPerGroup.t")
 		println(totCatsPerGroup.t)
@@ -350,7 +355,16 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 		println("totCatsPerGroup.ncols")
 		println(totCatsPerGroup.ncols)
 
-		val allBestCatsBundle = maxi2(totCatsPerGroup.t)
+		// TODO hack
+		var allBestCatsBundle : (Mat, Mat) = null 
+		(totCatsPerGroup) match {
+			case (tCPG : FMat) => {
+				allBestCatsBundle = maxi2(tCPG.t)
+			}
+			case (tCPG : GMat) => {
+				allBestCatsBundle = maxi2(tCPG.t)
+			}
+		}
 
 		val allBestCatsVals = allBestCatsBundle._1
 		println("Seems like a problem is here when marking the categories")
@@ -366,8 +380,11 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 	 	println(tPos(curT, 0->n))
 	 	println("filteredBestCats")
 	 	println(filteredBestCats)
-		tA(1,  tPos(curT, 0 -> n) + nnodes*curT) = filteredBestCats
-
+	 	if (useGPU) {
+			tA(1, GIMat(tPos(curT, 0 -> n)) + nnodes*curT) = filteredBestCats
+		} else {
+			tA(1, tPos(curT, 0 -> n) + nnodes*curT) = filteredBestCats
+		}
 	}
 
 
@@ -378,14 +395,15 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 		val sortedI = oTreeVal.izeros(t, n)
 		sortedI <-- (newSortedIndices)
 		val sortedIT = sortedI.t
-		(treePos, oTreeVal, treeOffsets, sortedIT, cats, treesArray, treesArrayFG) match {
-				case (tP: GIMat, oTV : GMat, tO : GIMat, sIT : GIMat, cts : GMat, tA : GIMat, tAFG : GMat) => {
-					handleGPUGetThresholdsAndUpdateTreesArray(tP, oTV, tO, sIT, cts, tA, tAFG)
-				}
-		}
+		handleGPUGetThresholdsAndUpdateTreesArray(treePos, oTreeVal, treeOffsets, sortedIT, cats, treesArray, treesArrayFG)
+		// (treePos, oTreeVal, treeOffsets, sortedIT, cats, treesArray, treesArrayFG) match {
+		// 		case (tP: GIMat, oTV : GMat, tO : GIMat, sIT : GIMat, cts : GMat, tA : GIMat, tAFG : GMat) => {
+		// 			handleGPUGetThresholdsAndUpdateTreesArray(tP, oTV, tO, sIT, cts, tA, tAFG)
+		// 		}
+		// }
 	}
 
-	private def handleGPUGetThresholdsAndUpdateTreesArray(tP: GIMat, oTV : GMat, tO : GIMat, sIT : GIMat, cts : GMat, tA : GIMat, tAFG : GMat) {
+	private def handleGPUGetThresholdsAndUpdateTreesArray(tP: Mat, oTV : Mat, tO : Mat, sIT : Mat, cts : Mat, tA : Mat, tAFG : Mat) {
 		val o1 = getNewSortIndicesTTreePosTAndTreeValsT(sIT, tP, oTV, tO)
 		val sTreePosT = o1._2
 		val soTreeValT = o1._3
@@ -411,10 +429,22 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 		}
 	}
 
-	private def getNewSortIndicesTTreePosTAndTreeValsT(sIT : GIMat, tP : GIMat, oTV : GMat, tO : GIMat) : (GIMat, GIMat, GMat) = {
+	private def getNewSortIndicesTTreePosTAndTreeValsT(sIT : Mat, tP : Mat, oTV : Mat, tO : Mat) : (Mat, Mat, Mat) = {
 		/* Make Copies of TreePos and TreeVals*/
-		val sTreePos = tP + 0 // t, n
-		val sTreePosT = sTreePos.t + tO  // n x t
+		var sTreePos : Mat = null
+		var sTreePosT : Mat = null
+		(tP, tO) match {
+			case (t : GIMat, tOff : GIMat) => {
+				val tPlusZ : GIMat = t + 0
+				val tPlusZT : GIMat = tPlusZ.t
+				sTreePos = tPlusZ
+				sTreePosT = tPlusZT + tOff		
+			}
+			case _ => {
+				sTreePos = tP + 0
+				sTreePosT = sTreePos.t + tO  // n x t
+			}
+		}
 		val soTreeVal  = oTV + 0f // t, n
 		val soTreeValT = soTreeVal.t // n x t
 		println("getNewSortIndicesTTreePosTAndTreeValsT")
@@ -428,12 +458,17 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 		(sIT, sTreePosT, soTreeValT)
 	}
 
-	private def getCurTreePosCurTreeValAndAssociatedSortedCats(sIT : GIMat, sTreePosT : GIMat, soTreeValT : GMat, cts : GMat, tO : GIMat, curT : Int) : (GIMat, GMat, GMat) = {
+	private def getCurTreePosCurTreeValAndAssociatedSortedCats(sIT : Mat, sTreePosT : Mat, soTreeValT : Mat, cts : Mat, tO : Mat, curT : Int) : (Mat, Mat, Mat) = {
 		println("sTreePosT")
 		println(sTreePosT)
-		val curOffset = (tO(0, curT))
+		val curOffset = tO(0 -> 1, curT) // hack
 		val curTreePosesTTemp = sTreePosT(0->n, curT) 
-		val curTreePosesT = curTreePosesTTemp - curOffset
+		var curTreePosesT : Mat = null
+		(curTreePosesTTemp, curOffset) match {
+			case (cTPTTemp : GIMat, cO : GIMat) => {
+				curTreePosesT = cTPTTemp - cO
+			}
+		}
 		val curTreeIndicesT = sIT(0->n, curT)
 		val curTreeValsT = soTreeValT(0->n, curT)
 		println("curTreePosesT before icopyT")
@@ -444,7 +479,7 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 		println(cts)
 		val (dmy, freebytes, allbytes) = GPUmem
 		println("dmy: " + dmy + " freebytes: " + freebytes + " allbytes: " + allbytes)
-		val pcats = BIDMatHelpers.icopyT(curTreeIndicesT, cts, null)
+		val pcats = BIDMatHelpers.icopyT(curTreeIndicesT, cts)
 		val (dmy1, freebytes1, allbytes1) = GPUmem
 		println("dmy: " + dmy1 + " freebytes: " + freebytes1 + " allbytes: " + allbytes1)
 		// CUMAT.icopyt(curTreeIndicesT.data, cts.data, pctst.data, n, c, n)
@@ -457,30 +492,42 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 		}
 	}
 
-	def getJCSegmentationForFullTree(curTreePoses : GIMat) : GIMat = {
-		val jcTemp : GMat = GMat.accum(curTreePoses, 1, null, nnodes, 1)
-		println("jcTemp.t")
-		println(jcTemp.t)
-		val jc = GIMat(IMat(0 on FMat(cumsumg(jcTemp, GIMat(0 on nnodes))))) // TODO: HACK
-		println("calculated jc.t")
-		println(jc.t)
-		jc
+	def getJCSegmentationForFullTree(curTreePoses : Mat) : Mat = {
+		(curTreePoses) match {
+			case (cTP : GIMat) => {
+				val jcTemp : GMat = GMat.accum(cTP, 1, null, nnodes, 1)
+				println("jcTemp.t")
+				println(jcTemp.t)
+				val jc = GIMat(IMat(0 on FMat(cumsumg(jcTemp, GIMat(0 on nnodes))))) // TODO: HACK
+				println("calculated jc.t")
+				println(jc.t)
+				jc
+			}
+		}
 	}
 
 	// should be ready
-	def markThresholdsGivenReductions(impurityReductions : GMat, curTreeValsT : GMat, tA : GIMat, tAFG : GMat, fullJC : GIMat, curT : Int) {
+	def markThresholdsGivenReductions(impurityReductions : Mat, curTreeValsT : Mat, tA : Mat, tAFG : Mat, fullJC : Mat, curT : Int) {
 		println("fullJC")
 		println(fullJC.t)
 		val partialJC = fullJC(((tree_nnodes -1) until (2*tree_nnodes)), 0)
 		println("partialJC")
 		println(partialJC.t)
-		val mxsimp = maxg(impurityReductions, partialJC)
+		val mxsimp = BIDMatHelpers.maxg(impurityReductions, partialJC)
 		println("mxsimp")
 		println(mxsimp)
 		val maxes = mxsimp._1
 		val maxis = mxsimp._2
 
-		val tempMaxis = maxis + 1
+		var tempMaxis : Mat = null
+		(maxis) match {
+			case (m : GIMat) => {
+				tempMaxis =  m + 1
+			}
+			case _ => {
+				tempMaxis =  maxis + 1
+			}
+		} 
 		println("tempMaxis")
 		println(tempMaxis)
 		val tempcurTreeValsT = impurityReductions.zeros(1 + curTreeValsT.nrows, 1) 
@@ -489,7 +536,7 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 		markTreeProdVals(tA, tAFG, maxTreeProdVals, tree_nnodes, nnodes, curT)
 	}
 
-	private def markTreeProdVals(tA: GIMat, tAFG : GMat, maxTreeProdVals : GMat, tree_nnodes : Int, nnodes : Int, curT : Int) {
+	private def markTreeProdVals(tA: Mat, tAFG : Mat, maxTreeProdVals : Mat, tree_nnodes : Int, nnodes : Int, curT : Int) {
 		val indiciesToMark = GIMat((nnodes * curT + tree_nnodes -1)->(nnodes * curT + 2*tree_nnodes - 1))
 		println("Indicies to Mark: ")
 		println(indiciesToMark)
@@ -502,12 +549,12 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 		println(tA)
 	}
 
-	private def calcImpurityReduction(pctsts : GMat, jc : GIMat, curTreePoses : GIMat) : GMat = {
+	private def calcImpurityReduction(pctsts : Mat, jc : Mat, curTreePoses : Mat) : Mat = {
 		println("calcImpurityReduction")
 
 		/** Left Total Impurity */
 		println("LEFT IMPURITY STUFF")
-		val leftAccumPctsts = cumsumg(pctsts, jc, null)
+		val leftAccumPctsts = BIDMatHelpers.cumsumg(pctsts, jc)
 		// println("Saving Matrix for CumSumG")
 		// saveAs("/home/derrick/code/NewRandomForest/BIDMach/tests/leftImpurityCumSumG.mat", FMat(pctsts), "pctsts", IMat(jc), "jc", FMat(leftAccumPctsts), "leftAccumPctsts")
 		// while(true) {
@@ -528,13 +575,28 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 		val totsTemps = jc(1 -> jc.length, 0)
 		println("totsTemps")
 		println(totsTemps)
-		val totsAccumPctstsTemps = leftAccumPctsts(totsTemps - 1, GIMat(0->leftAccumPctsts.ncols))
+		var totsTempMinusOne : Mat = null
+		(totsTemps) match {
+			case (tTmp : GIMat) => {
+				totsTempMinusOne = tTmp - 1
+			}
+			case _ => {
+				totsTempMinusOne = totsTemps - 1
+			}
+		}
+		val totsAccumPctstsTemps = leftAccumPctsts(totsTempMinusOne, 0->leftAccumPctsts.ncols)
 		println("totsAccumPctstsTemps")
 		println(totsAccumPctstsTemps)
-		val totTots = GMat(totsTemps(curTreePoses, GIMat(0))) * (leftAccumPctsts.zeros(1, leftAccumPctsts.ncols) + 1)
+		var totTots : Mat = null
+		if (useGPU) {
+			totTots = GMat(totsTemps(curTreePoses, 0)) * (leftAccumPctsts.zeros(1, leftAccumPctsts.ncols) + 1) 
+		} else {
+			totTots = totsTemps(curTreePoses, 0) * (leftAccumPctsts.zeros(1, leftAccumPctsts.ncols) + 1)  // GMat(totsTemps(curTreePoses, GIMat(0))) * (leftAccumPctsts.zeros(1, leftAccumPctsts.ncols) + 1)
+
+		}
 		println("totTots")
 		println(totTots)
-		val totsAccumPctsts = totsAccumPctstsTemps(curTreePoses, GIMat(0->leftAccumPctsts.ncols))  //* (leftAccumPctsts.zeros(1, leftAccumPctsts.ncols) + GMat(1))
+		val totsAccumPctsts = totsAccumPctstsTemps(curTreePoses, 0->leftAccumPctsts.ncols)  //* (leftAccumPctsts.zeros(1, leftAccumPctsts.ncols) + GMat(1))
 		println("totsAccumPctsts")
 		println(totsAccumPctsts)
 		val totsImpurity = getImpurityFor(totsAccumPctsts, totTots)
@@ -554,7 +616,7 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 		return summedImpurityReduction
 	}
 
-	private def getImpurityFor(accumPctsts : GMat, tots : GMat) : GMat = {
+	private def getImpurityFor(accumPctsts : Mat, tots : Mat) : Mat = {
 		(impurityType)  match {
 			case (1) => {
 				getImpurityForInfoGain(accumPctsts, tots)
@@ -565,7 +627,7 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 		}
 	}
 
-	private def getImpurityForInfoGain(accumPctsts : GMat, tots : GMat) : GMat = {
+	private def getImpurityForInfoGain(accumPctsts : Mat, tots : Mat) : Mat = {
 		println("getImpurityForInfoGain")
 		println("accumPctsts")
 		println(accumPctsts)
@@ -584,7 +646,7 @@ class BothEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType
 	}
 
 	
-	private def getImpurityForGiniImpurityReduction(accumPctsts : GMat, tots : GMat) : GMat = {
+	private def getImpurityForGiniImpurityReduction(accumPctsts : Mat, tots : Mat) : Mat = {
 		println("getImpurityForGiniImpurityReduction")
 		println("accumPctsts")
 		println(accumPctsts)
@@ -623,15 +685,11 @@ class BIDMatHelpers {
 
 object BIDMatHelpers {
 
-	def icopyT(indices : Mat, in : Mat, out : Mat) : Mat = {
-		(indices, in, out) match {
-      		case (ind: GIMat, i: GMat, o : GMat) => icopyT(ind, i, o)
-      		case (ind: IMat, i: FMat, o : FMat) => icopyT(ind, i, o)
-    	}
-	}
-
 	def icopyT(indices : Mat, in : Mat) : Mat = {
-		icopyT(indices, in, null)
+		(indices, in) match {
+      		case (ind: GIMat, i: GMat) => icopyT(ind, i, null)
+      		case (ind: IMat, i: FMat) => icopyT(ind, i, null)
+    	}
 	}
 
 	def icopyT(indices : GIMat, in : GMat, omat : GMat) : GMat = {
@@ -647,16 +705,18 @@ object BIDMatHelpers {
 		o.t
 	}
 
-	// def cumsumg(in : Mat, jc : Mat, omat : Mat) : GMat = {
-	// 	(in, jc, omat) match {
-	// 		case (i : GMat, j : GIMat, o : GMat) => {
-	// 			GMat
-	// 		}
-	// 		case (i : FMat, j : IMat, o : FMat) => {
-	// 			cumsumg(i, j, o)
-	// 		}
-	// 	}
-	// }
+	def cumsumg(in : Mat, jc : Mat) : Mat = {
+		(in, jc) match {
+			case (i : GMat, j : GIMat) => {
+				println("GPU Version")
+				GMat.cumsumg(i, j, null)
+			}
+			case (i : FMat, j : IMat) => {
+				println("CPU Version")
+				cumsumg(i, j, null)
+			}
+		}
+	}
 
 	def cumsumg(in : FMat,  jc : IMat, omat : FMat) : FMat = {
 		if (jc.length < 2) {
@@ -683,6 +743,17 @@ object BIDMatHelpers {
 			nc += 1
 		}
 		out 
+	}
+
+	def maxg(in : Mat, jc : Mat) : (Mat, Mat) = {
+		(in, jc) match {
+			case (i : GMat, j : GIMat) => {
+				GMat.maxg(i, j, null, null)
+			}
+			case (i : FMat, j : IMat) => {
+				maxg(i, j, null, null)
+			}
+		}
 	}
 
 	def maxg(in : FMat, jc : IMat, omat : FMat, omati : IMat) : (FMat, IMat) = {
