@@ -10,7 +10,7 @@ import edu.berkeley.bid.CUMAT
 /**
  * Random Forest Implementation
  */
-class CPURandomForest(d : Int, t: Int, ns: Int, fs : Mat, cs : Mat, impurityType : Int = 1, numCats : Int) {
+class CPURandomForest(d : Int, t: Int, ns: Int, fs : Mat, cs : Mat, impurityType : Int = 1, numCats : Int, gainThreshold : Float = 0) {
 	/*
 		Class Variables
 		n = # of samples
@@ -58,7 +58,7 @@ class CPURandomForest(d : Int, t: Int, ns: Int, fs : Mat, cs : Mat, impurityType
 		var k = 0;
 		while (k < d - 1) { // d of them; each level
    			treeProd(treesArray, treesArrayF, feats, treePos, oTreeVal);
-			e = new CPUEntropyEval(oTreeVal, cats, d, k, impurityType)
+			e = new CPUEntropyEval(oTreeVal, cats, d, k, impurityType, gainThreshold)
 			e.getThresholdsAndUpdateTreesArray(treePos, oTreeVal, treesArray, treesArrayF)
 			treeProd(treesArray, treesArrayF, feats, treePos, oTreePos)
 			treePos <-- oTreePos
@@ -117,7 +117,7 @@ class CPURandomForest(d : Int, t: Int, ns: Int, fs : Mat, cs : Mat, impurityType
 	} 
 
 	private def markAllCurPositionsAsLeavesAndCategorizeThem(tArray : Mat, tAFG : Mat, tPos : Mat) {
-		val c = new CPUEntropyEval(oTreeVal, cats, d, d, impurityType)
+		val c = new CPUEntropyEval(oTreeVal, cats, d, d, impurityType, gainThreshold)
 		var curT = 0
 		while (curT < t) {
 			tAFG(0,  tPos(curT, 0 -> n) + curT * nnodes) = scala.Float.NegativeInfinity * iones(1, n)
@@ -242,7 +242,7 @@ class CPURandomForest(d : Int, t: Int, ns: Int, fs : Mat, cs : Mat, impurityType
  * EntropyEval:
  * Given the current depth marks the treesArray with the right thresholds
  */
-class CPUEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType : Int) {
+class CPUEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType : Int, gainThreshold : Float) {
 	val useGPU = oTreeVal match {case oTV:GMat => true; case _ => false };
 	val n = oTreeVal.ncols
 	val t = oTreeVal.nrows;
@@ -360,7 +360,7 @@ class CPUEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType 
 		val mxsimp = CPUBIDMatHelpers.maxg(impurityReductions, partialJC)
 		val maxes = mxsimp._1
 		val maxis = mxsimp._2
-		val newMaxis = getNewMaxis(mxsimp) // helprs marks some things as being levaes if their impurtiy is too little
+		val newMaxis = getNewMaxis(mxsimp) // helprs marks some things as being leaves if their impurtiy is too little
 		var tempMaxis =  newMaxis + 1
 		val tempcurTreeValsT = impurityReductions.zeros(1 + curTreeValsT.nrows, 1) 
 		tempcurTreeValsT <-- (scala.Float.NegativeInfinity on curTreeValsT)
@@ -372,8 +372,8 @@ class CPUEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType 
 	private def getNewMaxis(mxsimp : (Mat, Mat)) : Mat = {
 		val maxes = mxsimp._1
 		val maxis = mxsimp._2
-		val mask = izeros(maxes.nrows, maxes.ncols) // keeping this line uncommented means that this method is not doing anything
-		// val mask = maxes <= 0 //what to mark with -1; uncomment if you want this method to activate
+		// val mask = izeros(maxes.nrows, maxes.ncols) // keeping this line uncommented means that this method is not doing anything
+		val mask = maxes <= gainThreshold //what to mark with -1; uncomment if you want this method to activate
 		val conjMask = 1 - mask // what to keep as the same for maxis
 		val newMaxis = conjMask *@ maxis + mask *@ (-1 * iones(maxis.nrows, maxis.ncols))
 		IMat(newMaxis)
@@ -412,7 +412,7 @@ class CPUEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType 
 		val rightAccumPctsts = totsAccumPctsts - leftAccumPctsts
 		val rightImpurity = getImpurityFor(rightAccumPctsts, rightTots)
 
-		val impurityReduction = totsImpurity - leftImpurity - rightImpurity
+		val impurityReduction = (leftImpurity + rightImpurity) - totsImpurity 
 		val summedImpurityReduction = sum(impurityReduction, 2)
 		return summedImpurityReduction
 	}
