@@ -57,7 +57,6 @@ class CPURandomForest(d : Int, t: Int, ns: Int, fs : Mat, cs : Mat, impurityType
 	def train {
 		var k = 0;
 		while (k < d - 1) { // d of them; each level
-			println("LEVEL K = " + k)
    			treeProd(treesArray, treesArrayF, feats, treePos, oTreeVal);
 			e = new CPUEntropyEval(oTreeVal, cats, d, k, impurityType)
 			e.getThresholdsAndUpdateTreesArray(treePos, oTreeVal, treesArray, treesArrayF)
@@ -65,7 +64,6 @@ class CPURandomForest(d : Int, t: Int, ns: Int, fs : Mat, cs : Mat, impurityType
 			treePos <-- oTreePos
 			k = k + 1
 		}
-		println(treePos)
 		markAllCurPositionsAsLeavesAndCategorizeThem(treesArray, treesArrayF, treePos)
 	}
 
@@ -82,12 +80,7 @@ class CPURandomForest(d : Int, t: Int, ns: Int, fs : Mat, cs : Mat, impurityType
 
 	private def voteForBestCategoriesAcrossTrees(treeCats : Mat) : Mat = {
 		val treeCatsT = treeCats.t
-		println("TREECATS NUM GREATER OR EQUAL TO 2")
-		println(sum(sum(treeCatsT >= numCats, 1), 2))
-		println("TREECATS TOT")
-		println(treeCatsT.length)
-		// MARK things that are greater than numCats than 
-		val newTreeCatsT = markWithValueIfGreaterThan(treeCatsT, 1, numCats)
+		val newTreeCatsT = markWithValueIfGreaterThan(treeCatsT, 0, numCats) // sometimes treeCats has values aren't actually categories. so mark them with zeros
 		val accumedTreeCats = accumG(newTreeCatsT, 2, numCats)
 		var bundle : (Mat, Mat) = null
 		(accumedTreeCats) match {
@@ -257,8 +250,7 @@ class CPUEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType 
 	val treeOffsets = oTreeVal.izeros(1,t)
 	val nnodes = (math.pow(2, d) + 0.5).toInt
 	val tree_nnodes = (math.pow(2, k) + 0.5).toInt;
-	treeOffsets <-- (nnodes * icol(0->t)) 
-	println(treeOffsets)
+	treeOffsets <-- (nnodes * icol(0->t))
 	val c = cats.nrows;
 	val eps = 1E-5.toFloat
 
@@ -282,15 +274,9 @@ class CPUEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType 
 		while (curT < t) {
 			val o2 = getCurTreePosCurTreeValAndAssociatedSortedCats(sIT, sTreePosT, soTreeValT, cts, tO, curT)
 			val curTreePosesT = o2._1
-			println("curTreePosesT")
-			println(curTreePosesT)
 			val curTreeValsT = o2._2
 			val pctsts = o2._3
-			println("pctsts")
-			println(pctsts)
 			val fullJCForCurTree = getJCSegmentationForFullTree(curTreePosesT)
-			println("fullJCForCurTree")
-			println(fullJCForCurTree.t)
 			markBestCategories(tP, pctsts, fullJCForCurTree, tA, curT)
 			curT += 1
 		}
@@ -298,14 +284,8 @@ class CPUEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType 
 
 	private def markBestCategories(tPos: Mat, pctsts : Mat, fullJCForCurTree : Mat, tA : Mat, curT : Int) {
 		val accumPctst = CPUBIDMatHelpers.cumsumg(pctsts, fullJCForCurTree)
-		println("MarkBestCategories")
-		println("assdf -accumPctst.t")
-		println(accumPctst.t)
 		val tempBundle = CPUBIDMatHelpers.maxg(accumPctst, fullJCForCurTree)
 		val totCatsPerGroup = tempBundle._1
-		println("totCatsPerGroup")
-		println(totCatsPerGroup)
-		println(totCatsPerGroup.t)
 		val totCatsPerGroupIndicies = tempBundle._2
 		var allBestCatsBundle : (Mat, Mat) = null
 		(totCatsPerGroup) match {
@@ -316,11 +296,7 @@ class CPUEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType 
 		val allBestCatsVals = allBestCatsBundle._1
 		val allBestCats = allBestCatsBundle._2
 		val allBestCatsT = allBestCats.t
-		println("allBestCatsT.t")
-		println(allBestCatsT.t)
 	 	val filteredBestCats = allBestCats(0, tPos(curT, 0->n))
-		println("filteredBestCats")
-		println(filteredBestCats)
 		tA(1, tPos(curT, 0 -> n) + nnodes*curT) = filteredBestCats
 	}
 
@@ -332,8 +308,6 @@ class CPUEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType 
 		val sortedI = oTreeVal.izeros(t, n)
 		sortedI <-- (newSortedIndices)
 		val sortedIT = sortedI.t
-		println("sortedIT")
-		println(sortedIT)
 		handleGetThresholdsAndUpdateTreesArray(treePos, oTreeVal, treeOffsets, sortedIT, cats, treesArray, treesArrayFG)
 	}
 
@@ -347,8 +321,6 @@ class CPUEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType 
 			val o2 = getCurTreePosCurTreeValAndAssociatedSortedCats(sIT, sTreePosT, soTreeValT, cts, tO, curT)
 			val curTreePosesT = o2._1
 			val curTreeValsT = o2._2
-			println("handleGetThresholdsAndUpdateArray - curTreePosesT")
-			println(curTreePosesT.t)
 			val pctsts = o2._3
 			val fullJCForCurTree = getJCSegmentationForFullTree(curTreePosesT)
 			val fullImpurityReductions = calcImpurityReduction(pctsts, fullJCForCurTree, curTreePosesT)
@@ -387,9 +359,8 @@ class CPUEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType 
 		val partialJC = fullJC(((tree_nnodes -1) until (2*tree_nnodes)), 0)
 		val mxsimp = CPUBIDMatHelpers.maxg(impurityReductions, partialJC)
 		val maxes = mxsimp._1
-		// TODO: Mark some things as negative infinity if some of the impurity gains are little
 		val maxis = mxsimp._2
-		val newMaxis = getNewMaxis(mxsimp)
+		val newMaxis = getNewMaxis(mxsimp) // helprs marks some things as being levaes if their impurtiy is too little
 		var tempMaxis =  newMaxis + 1
 		val tempcurTreeValsT = impurityReductions.zeros(1 + curTreeValsT.nrows, 1) 
 		tempcurTreeValsT <-- (scala.Float.NegativeInfinity on curTreeValsT)
@@ -401,7 +372,8 @@ class CPUEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType 
 	private def getNewMaxis(mxsimp : (Mat, Mat)) : Mat = {
 		val maxes = mxsimp._1
 		val maxis = mxsimp._2
-		val mask = izeros(maxes.nrows, maxes.ncols) // maxes <= 0 //what to mark with -1 
+		val mask = izeros(maxes.nrows, maxes.ncols) // keeping this line uncommented means that this method is not doing anything
+		// val mask = maxes <= 0 //what to mark with -1; uncomment if you want this method to activate
 		val conjMask = 1 - mask // what to keep as the same for maxis
 		val newMaxis = conjMask *@ maxis + mask *@ (-1 * iones(maxis.nrows, maxis.ncols))
 		IMat(newMaxis)
@@ -442,8 +414,6 @@ class CPUEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType 
 
 		val impurityReduction = totsImpurity - leftImpurity - rightImpurity
 		val summedImpurityReduction = sum(impurityReduction, 2)
-		println("summedImpurityReduction")
-		println(summedImpurityReduction.t)
 		return summedImpurityReduction
 	}
 
@@ -459,28 +429,21 @@ class CPUEntropyEval(oTreeVal : Mat, cats : Mat, d : Int, k : Int, impurityType 
 	}
 
 	private def getImpurityForInfoGain(accumPctsts : Mat, tots : Mat) : Mat = {
-		println("getImpurityForInfoGain")
 		val ps = (accumPctsts / (tots + eps)) + eps  
 		val conjps = (1f - ps) + eps
 		val impurity = -1f * ( ps *@ ln(ps) + (conjps *@ ln(conjps)))
-		println("impurity.t")
-		println(impurity.t)
 		impurity 
 	}
 
 	
 	private def getImpurityForGiniImpurityReduction(accumPctsts : Mat, tots : Mat) : Mat = {
-		println("getImpurityForGiniImpurityReduction")
 		val ps = (accumPctsts / (tots + eps)) + eps  
 		val conjps = (1f - ps) + eps
 		val impurity = ps *@ conjps
-		println("impurity.t")
-		println(impurity.t)
 		impurity 
 	}
 
   	private def lexsort2i(a : Mat, b: Mat, i : Mat) {
-  		println("lexsort2i")
     	(a, b, i) match {
       	case (aa: GIMat, bb: GMat, ii : GIMat) => GMat.lexsort2i(aa, bb, ii);
       	case (aa: IMat, bb: FMat, ii : IMat) => CPUBIDMatHelpers.lexsort2iCPU(aa, bb, ii)
@@ -531,7 +494,6 @@ object CPUBIDMatHelpers {
 	}
 
 	def cumsumg(in : IMat,  jc : IMat, omat : IMat) : IMat = {
-		println("cumsumg - IMat")
 		if (jc.length < 2) {
 			throw new RuntimeException("cumsumg error: invalid arguments")
 		}
@@ -559,7 +521,6 @@ object CPUBIDMatHelpers {
 	}
 
 	def cumsumg(in : FMat,  jc : IMat, omat : FMat) : FMat = {
-		println("cumsumg - FMat")
 		if (jc.length < 2) {
 			throw new RuntimeException("cumsumg error: invalid arguments")
 		}
@@ -587,7 +548,6 @@ object CPUBIDMatHelpers {
 	}
 
 	def maxg(in : Mat, jc : Mat) : (Mat, Mat) = {
-		println("maxg")
 		(in, jc) match {
 			case (i : GMat, j : GIMat) => {
 				GMat.maxg(i, j, null, null)
@@ -599,7 +559,6 @@ object CPUBIDMatHelpers {
 	}
 
 	def maxg(in : FMat, jc : IMat, omat : FMat, omati : IMat) : (FMat, IMat) = {
-		println("maxg - FMat")
 		if (jc.length < 2) {
 			throw new RuntimeException("maxg error: invalid arguments")
 		}
