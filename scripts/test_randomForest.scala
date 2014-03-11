@@ -92,8 +92,8 @@ def testBothRandomForest : BothRandomForest = {
 def testGPURandomForest : RandomForest = {
 	val numCats = 2
 	val impurityType = 1
-	val d = 11
-	val t = 32
+	val d = 19
+	val t = 64
 	val ns = 2
 	val feats : GMat = GMat(x.t);
 	// val feats : GMat = GMat(21\4.0\2\3 on 31\7.0\1\15 on 1.0\2.0\9\12) 
@@ -105,8 +105,6 @@ def testGPURandomForest : RandomForest = {
 	randomForest.train;
 	println(randomForest.treePos.nrows)
 	println(randomForest.treePos.ncols)
-
-
 
 	println("Starting Classification")
 	val testFeats = GMat(xTest.t)
@@ -130,25 +128,52 @@ def testGPURandomForest : RandomForest = {
 	randomForest
 }
 
-def testCPURandomForest {
-	val d = 2;
-	val t = 2;
-	val ns = 2;
-	// val feats : GMat = GMat(x.t);
-	val feats : FMat = FMat(21\4.0\2\3 on 31\7.0\1\15 on 1.0\2.0\9\12) 
+def testCPURandomForest : CPURandomForest = {
+	val numCats = 2
+	val impurityType = 1
+	val d = 9
+	val t = 1
+	val ns = 2
+	val feats : FMat = FMat(x.t);
+	// val feats : FMat = FMat(21\4.0\2\3 on 31\7.0\1\15 on 1.0\2.0\9\12) 
 	val f : Int = feats.nrows;
 	val n : Int = feats.ncols;
-	// val cats : GMat = GMat(((iones(n,1) * irow(0->2)) == y).t);
-	val cats : FMat = FMat(1\0\0\0 on 0\1\1\1);
-
-	val randomForest : CPURandomForest = new CPURandomForest(d, t, ns, feats, cats);
+	val cats : FMat = FMat(((iones(n,1) * irow(0->numCats)) == y).t);
+	// val cats : FMat = FMat(0\1\1\0 on 1\0\0\1);
+	val randomForest : CPURandomForest = new CPURandomForest(d, t, ns, feats, cats, impurityType, numCats);
+	println("CPURandomForest: Train")
 	randomForest.train;
+
+	println("Starting Classification")
+	val testFeats = FMat(xTest.t)
+	println("asdfsf")
+	val testN : Int = testFeats.ncols
+	println("asdfasdfsadfa")
+	val testCats : FMat = FMat(((iones(testN,1) * irow(0->numCats)) == yTest).t);
+	println("asdfasdfsadfaasdfsdfsad")
+	val guessTemp = randomForest.classify(testFeats)
+	val guess = FMat(guessTemp(0, 0->testN))
+	println("guess")
+	println(guess)
+	println("Num ones for Guess")
+	println(sum(guess))
+	println("Num Guess Total")
+	println(guess.ncols)
+	println("testCats(1, 0->testN)")
+	println(testCats(1, 0->testN))
+	println("num actual ones")
+	println(sum(testCats(1, 0->testN)))
+	val accuracy = calcAccuracy(guess, testCats(1, 0->testN))
+	println("accuracy")
+	println(accuracy)
+
+	randomForest
 }
 
 // val rF = testGPURandomForest
-// val rF = testCPURandomForest
+val rF = testCPURandomForest
 // val rF = testBothRandomForest
-val rF = testCPUBothRandomForest
+// val rF = testCPUBothRandomForest
 
 /**
 	Testing TreeProd
