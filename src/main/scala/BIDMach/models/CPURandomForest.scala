@@ -80,6 +80,10 @@ class CPURandomForest(d : Int, t: Int, ns: Int, fs : Mat, cs : Mat, impurityType
 
 	private def voteForBestCategoriesAcrossTrees(treeCats : Mat) : Mat = {
 		val treeCatsT = treeCats.t
+		println("TREECATS NUM GREATER OR EQUAL TO 2")
+ 		println(sum(sum(treeCatsT >= numCats, 1), 2))
+ 		println("TREECATS TOT")
+ 		println(treeCatsT.length)
 		val newTreeCatsT = markWithValueIfGreaterThan(treeCatsT, 0, numCats) // sometimes treeCats has values aren't actually categories. so mark them with zeros
 		val accumedTreeCats = accumG(newTreeCatsT, 2, numCats)
 		var bundle : (Mat, Mat) = null

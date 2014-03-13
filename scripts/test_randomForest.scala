@@ -168,10 +168,57 @@ def testCPURandomForest : CPURandomForest = {
 	randomForest
 }
 
+def testDigitsCPURandomForest : CPURandomForest = {
+	val x : IMat = load("../Data/digits.mat", "xTrain"); 
+	val y : DMat = load("../Data/digits.mat", "yTrain"); 
+	val xTest : IMat = load("../Data/digits.mat", "xTest");
+	val yTest : DMat = load("../Data/digits.mat", "yTest");
+
+	val numCats = 10
+	val impurityType = 1
+	val gainThreshold = 0f
+	val d = 9
+	val t = 12
+	val ns = 2
+	val feats : FMat = FMat(x);
+	// val feats : FMat = FMat(21\4.0\2\3 on 31\7.0\1\15 on 1.0\2.0\9\12) 
+	val f : Int = feats.nrows;
+	val n : Int = feats.ncols;
+	val cats : FMat = FMat(((iones(n,1) * irow(0->numCats)) == FMat(y)  ).t);
+	// val cats : FMat = FMat(0\1\1\0 on 1\0\0\1);
+	val randomForest : CPURandomForest = new CPURandomForest(d, t, ns, feats, cats, impurityType, numCats, gainThreshold);
+	println("CPURandomForest: Train")
+	randomForest.train;
+
+	println("Starting Classification")
+	val testFeats = FMat(xTest)
+	val testN : Int = testFeats.ncols
+	val testCats : FMat = FMat(((iones(testN,1) * irow(0->numCats)) == FMat(yTest)   ).t);
+	val guessTemp = randomForest.classify(testFeats)
+	val guess = FMat(guessTemp(0, 0->testN))
+	println("guess")
+	println(guess)
+	println("Num ones for Guess")
+	println(sum(guess))
+	println("Num Guess Total")
+	println(guess.ncols)
+	println("testCats(1, 0->testN)")
+	println(testCats(1, 0->testN))
+	println("num actual ones")
+	println(sum(testCats(1, 0->testN)))
+	val accuracy = calcAccuracy(guess, testCats(1, 0->testN))
+	println("accuracy")
+	println(accuracy)
+
+	randomForest
+}
+
+
 // val rF = testGPURandomForest
-val rF = testCPURandomForest
+// val rF = testCPURandomForest
 // val rF = testBothRandomForest
 // val rF = testCPUBothRandomForest
+val rF = testDigitsCPURandomForest
 
 /**
 	Testing TreeProd
